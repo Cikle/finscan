@@ -383,6 +383,136 @@ class StockDataScraper:
         
         return self.data["yahoo_finance"]
     
+    def get_analyst_recommendations(self):
+        """Get analyst recommendations and price targets"""
+        print("ℹ️ Fetching analyst recommendations...")
+        self.data["analyst_recommendations"] = {}
+        
+        try:
+            # Try to get analyst data from Finviz first
+            if "Recom" in self.data["finviz"]:
+                self.data["analyst_recommendations"]["consensus"] = self.data["finviz"]["Recom"]
+            
+            if "Target Price" in self.data["finviz"]:
+                self.data["analyst_recommendations"]["price_target"] = self.data["finviz"]["Target Price"]
+            
+            # Try to get more detailed data from Yahoo Finance
+            if yf is not None:
+                try:
+                    ticker = yf.Ticker(self.symbol)
+                    recommendations = ticker.recommendations
+                    if recommendations is not None and not recommendations.empty:
+                        # Get the most recent recommendations
+                        recent_recs = recommendations.sort_index(ascending=False).head(5)
+                        rec_dict = {}
+                        for date, row in recent_recs.iterrows():
+                            firm = row.get('Firm', '')
+                            to_grade = row.get('To Grade', '')
+                            rec_dict[str(date).split()[0]] = f"{firm}: {to_grade}"
+                        self.data["analyst_recommendations"]["recent"] = rec_dict
+                except Exception as e:
+                    print(f"⚠️ Could not fetch detailed analyst recommendations: {e}")
+            
+            print("✅ Analyst recommendation data collected")
+        except Exception as e:
+            print(f"⚠️ Error collecting analyst recommendations: {e}")
+            self.data["analyst_recommendations"] = {"error": str(e)}
+        
+        return self.data["analyst_recommendations"]
+    
+    def get_financial_summary(self):
+        """Get summary financial data"""
+        print("ℹ️ Fetching financial summary data...")
+        self.data["financial_summary"] = {}
+        
+        try:
+            # Extract data from Finviz
+            finviz_financials = {
+                "profit_margin": self.data["finviz"].get("Profit Margin", ""),
+                "operating_margin": self.data["finviz"].get("Oper. Margin", ""),
+                "return_on_assets": self.data["finviz"].get("ROA", ""),
+                "return_on_equity": self.data["finviz"].get("ROE", ""),
+                "revenue": self.data["finviz"].get("Sales", ""),
+                "revenue_growth": self.data["finviz"].get("Sales Y/Y TTM", ""),
+                "quarterly_revenue_growth": self.data["finviz"].get("Sales Q/Q", ""),
+                "gross_profit_margin": self.data["finviz"].get("Gross Margin", ""),
+                "diluted_eps": self.data["finviz"].get("EPS (ttm)", ""),
+                "earnings_growth": self.data["finviz"].get("EPS Y/Y TTM", ""),
+                "quarterly_earnings_growth": self.data["finviz"].get("EPS Q/Q", "")
+            }
+            
+            self.data["financial_summary"]["income_statement"] = finviz_financials
+            
+            # Balance sheet data from Finviz
+            finviz_balance_sheet = {
+                "cash_per_share": self.data["finviz"].get("Cash/sh", ""),
+                "book_value_per_share": self.data["finviz"].get("Book/sh", ""),
+                "debt_to_equity": self.data["finviz"].get("Debt/Eq", ""),
+                "long_term_debt_to_equity": self.data["finviz"].get("LT Debt/Eq", ""),
+                "current_ratio": self.data["finviz"].get("Current Ratio", ""),
+                "quick_ratio": self.data["finviz"].get("Quick Ratio", "")
+            }
+            
+            self.data["financial_summary"]["balance_sheet"] = finviz_balance_sheet
+            
+            # Try to get more from Yahoo Finance if available
+            try:
+                if "beta" in self.data["yahoo_finance"]:
+                    self.data["financial_summary"]["beta"] = self.data["yahoo_finance"]["beta"]
+            except:
+                pass
+            
+            print("✅ Financial summary data collected")
+        except Exception as e:
+            print(f"⚠️ Error collecting financial summary: {e}")
+            self.data["financial_summary"] = {"error": str(e)}
+        
+        return self.data["financial_summary"]
+    
+    def get_competitors(self):
+        """Get competitors analysis"""
+        print("ℹ️ Fetching competitors data...")
+        self.data["competitors"] = {}
+        
+        try:
+            # Use the sector and industry from Yahoo Finance to get peers
+            sector = self.data["yahoo_finance"].get("sector", "")
+            industry = self.data["yahoo_finance"].get("industry", "")
+            
+            if sector and industry:
+                self.data["competitors"]["sector"] = sector
+                self.data["competitors"]["industry"] = industry
+                
+                # Use Finviz data for industry analysis if we have it
+                if "Sector" in self.data["finviz"]:
+                    self.data["competitors"]["finviz_sector"] = self.data["finviz"].get("Sector", "")
+                
+                if "Industry" in self.data["finviz"]:
+                    self.data["competitors"]["finviz_industry"] = self.data["finviz"].get("Industry", "")
+                
+                # Add competitor comparison data
+                self.data["competitors"]["comparison"] = {
+                    "this_company": {
+                        "symbol": self.symbol,
+                        "market_cap": self.data["finviz"].get("Market Cap", ""),
+                        "pe_ratio": self.data["finviz"].get("P/E", ""),
+                        "forward_pe": self.data["finviz"].get("Forward P/E", ""),
+                        "ps_ratio": self.data["finviz"].get("P/S", ""),
+                        "pb_ratio": self.data["finviz"].get("P/B", "")
+                    }
+                }
+                
+                print("✅ Competitors analysis collected")
+            else:
+                self.data["competitors"] = {
+                    "note": "No sector/industry data available to identify competitors"
+                }
+        except Exception as e:
+            print(f"⚠️ Error collecting competitors data: {e}")
+            self.data["competitors"] = {"error": str(e)}
+        
+        return self.data["competitors"]
+    
     def collect_all_data(self):
         """Collect data from all sources"""
         print(f"🔍 Collecting data for {self.symbol}...")
@@ -391,6 +521,11 @@ class StockDataScraper:
         self.get_capital_com_data()
         self.get_openinsider_data()
         self.get_yahoo_finance_data()
+        
+        # Add our new data collection methods
+        self.get_analyst_recommendations()
+        self.get_financial_summary()
+        self.get_competitors()
         
         print(f"✅ All data collected for {self.symbol}")
         return self.data
@@ -528,12 +663,129 @@ class StockDataScraper:
         for key, value in self.data["yahoo_finance"].items():
             if key != "error":  # Skip error messages
                 html_content += f"<tr><td>{key}</td><td>{value}</td></tr>\n"
-        
         html_content += """
                     </table>
                 </div>
             </div>
         """
+        
+        # Add Analyst Recommendations if available
+        if "analyst_recommendations" in self.data and self.data["analyst_recommendations"]:
+            html_content += """
+                <div class="section">
+                    <h2>Analyst Recommendations</h2>
+                    <div class="card">
+                        <table>
+                            <tr><th>Metric</th><th>Value</th></tr>
+            """
+            
+            for key, value in self.data["analyst_recommendations"].items():
+                if key == "recent" and isinstance(value, dict):
+                    html_content += f"<tr><td colspan='2'><strong>Recent Recommendations</strong></td></tr>"
+                    for date, rec in value.items():
+                        html_content += f"<tr><td>{date}</td><td>{rec}</td></tr>"
+                elif key != "error":
+                    html_content += f"<tr><td>{key.replace('_', ' ').title()}</td><td>{value}</td></tr>"
+            
+            html_content += """
+                        </table>
+                    </div>
+                </div>
+            """
+        
+        # Add Financial Summary if available
+        if "financial_summary" in self.data and self.data["financial_summary"]:
+            html_content += """
+                <div class="section">
+                    <h2>Financial Summary</h2>
+                    <div class="card">
+            """
+            
+            # Income Statement data
+            if "income_statement" in self.data["financial_summary"]:
+                html_content += """
+                        <h3>Income Statement Metrics</h3>
+                        <table>
+                            <tr><th>Metric</th><th>Value</th></tr>
+                """
+                
+                for key, value in self.data["financial_summary"]["income_statement"].items():
+                    if value:  # Only show metrics that have values
+                        html_content += f"<tr><td>{key.replace('_', ' ').title()}</td><td>{value}</td></tr>"
+                
+                html_content += """
+                        </table>
+                        <br>
+                """
+            
+            # Balance Sheet data
+            if "balance_sheet" in self.data["financial_summary"]:
+                html_content += """
+                        <h3>Balance Sheet Metrics</h3>
+                        <table>
+                            <tr><th>Metric</th><th>Value</th></tr>
+                """
+                
+                for key, value in self.data["financial_summary"]["balance_sheet"].items():
+                    if value:  # Only show metrics that have values
+                        html_content += f"<tr><td>{key.replace('_', ' ').title()}</td><td>{value}</td></tr>"
+                
+                html_content += """
+                        </table>
+                """
+            
+            html_content += """
+                    </div>
+                </div>
+            """
+        
+        # Add Competitors Analysis if available
+        if "competitors" in self.data and self.data["competitors"]:
+            html_content += """
+                <div class="section">
+                    <h2>Industry & Competitors</h2>
+                    <div class="card">
+            """
+            
+            # Sector and Industry info
+            if "sector" in self.data["competitors"] or "industry" in self.data["competitors"]:
+                html_content += """
+                        <h3>Sector & Industry</h3>
+                        <table>
+                            <tr><th>Category</th><th>Classification</th></tr>
+                """
+                
+                if "sector" in self.data["competitors"]:
+                    html_content += f"<tr><td>Sector</td><td>{self.data['competitors']['sector']}</td></tr>"
+                
+                if "industry" in self.data["competitors"]:
+                    html_content += f"<tr><td>Industry</td><td>{self.data['competitors']['industry']}</td></tr>"
+                
+                html_content += """
+                        </table>
+                        <br>
+                """
+            
+            # Comparison data
+            if "comparison" in self.data["competitors"] and "this_company" in self.data["competitors"]["comparison"]:
+                html_content += """
+                        <h3>Valuation Metrics</h3>
+                        <table>
+                            <tr><th>Metric</th><th>Value</th></tr>
+                """
+                
+                for key, value in self.data["competitors"]["comparison"]["this_company"].items():
+                    if key != "symbol" and value:
+                        html_content += f"<tr><td>{key.replace('_', ' ').title()}</td><td>{value}</td></tr>"
+                
+                html_content += """
+                        </table>
+                """
+            
+            html_content += """
+                    </div>
+                </div>
+            """
         
         # Add Capital.com data if available
         if self.data["capital_com"] and "error" not in self.data["capital_com"]:
@@ -592,6 +844,62 @@ class StockDataScraper:
         for key, value in self.data["yahoo_finance"].items():
             if key != "error":
                 html_content += f"{key}: {value}\\n"
+        
+        # Add Analyst Recommendations to the copy text
+        if "analyst_recommendations" in self.data and self.data["analyst_recommendations"]:
+            html_content += """
+                    
+                    === ANALYST RECOMMENDATIONS ===
+            """
+            
+            for key, value in self.data["analyst_recommendations"].items():
+                if key == "recent" and isinstance(value, dict):
+                    html_content += f"Recent Recommendations:\\n"
+                    for date, rec in value.items():
+                        html_content += f"  {date}: {rec}\\n"
+                elif key != "error":
+                    html_content += f"{key.replace('_', ' ').title()}: {value}\\n"
+        
+        # Add Financial Summary to the copy text
+        if "financial_summary" in self.data and self.data["financial_summary"]:
+            html_content += """
+                    
+                    === FINANCIAL SUMMARY ===
+            """
+            
+            # Income Statement data
+            if "income_statement" in self.data["financial_summary"]:
+                html_content += "Income Statement Metrics:\\n"
+                for key, value in self.data["financial_summary"]["income_statement"].items():
+                    if value:
+                        html_content += f"  {key.replace('_', ' ').title()}: {value}\\n"
+            
+            # Balance Sheet data
+            if "balance_sheet" in self.data["financial_summary"]:
+                html_content += "\\nBalance Sheet Metrics:\\n"
+                for key, value in self.data["financial_summary"]["balance_sheet"].items():
+                    if value:
+                        html_content += f"  {key.replace('_', ' ').title()}: {value}\\n"
+        
+        # Add Competitors Analysis to the copy text
+        if "competitors" in self.data and self.data["competitors"]:
+            html_content += """
+                    
+                    === INDUSTRY & COMPETITORS ===
+            """
+            
+            if "sector" in self.data["competitors"]:
+                html_content += f"Sector: {self.data['competitors']['sector']}\\n"
+            
+            if "industry" in self.data["competitors"]:
+                html_content += f"Industry: {self.data['competitors']['industry']}\\n"
+            
+            # Comparison data
+            if "comparison" in self.data["competitors"] and "this_company" in self.data["competitors"]["comparison"]:
+                html_content += "\\nValuation Metrics:\\n"
+                for key, value in self.data["competitors"]["comparison"]["this_company"].items():
+                    if key != "symbol" and value:
+                        html_content += f"  {key.replace('_', ' ').title()}: {value}\\n"
         
         html_content += """`;
                     
