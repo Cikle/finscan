@@ -20,6 +20,14 @@ class FinScanApp:
         self.root.geometry("800x600")
         self.root.minsize(600, 500)
         
+        # Set up temp directory path
+        self.temp_dir = os.path.join(os.getcwd(), "temp_data")
+        if not os.path.exists(self.temp_dir):
+            os.makedirs(self.temp_dir)
+        
+        # Register cleanup function to run when app is closed
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        
         # Set style
         self.style = ttk.Style()
         self.style.configure("TButton", font=("Arial", 10))
@@ -179,13 +187,20 @@ class FinScanApp:
             args=(symbol, filename, env)
         )
         thread.daemon = True
-        thread.start()
-    
     def run_scraper_thread(self, symbol, filename, env):
+      def run_scraper_thread(self, symbol, filename, env):
         """Run the stock data scraper in a separate thread"""
         try:
+            # Create temp directory if it doesn't exist
+            temp_dir = os.path.join(os.getcwd(), "temp_data")
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir)
+            
+            # Set the output path to be in the temp directory
+            output_path = os.path.join(temp_dir, filename)
+            
             # Build the command
-            cmd = [sys.executable, "stock_data_scraper.py", symbol, "--html", "--output", filename]
+            cmd = [sys.executable, "stock_data_scraper.py", symbol, "--html", "--output", output_path]
             
             # Execute the command and capture output
             process = subprocess.Popen(
@@ -216,7 +231,7 @@ class FinScanApp:
             
             # Update UI based on result
             if return_code == 0:
-                # Success
+                # Success - pass just the filename (not the full path) for display purposes
                 self.root.after(0, self.scraper_completed, True, symbol, filename)
             else:
                 # Error
@@ -225,24 +240,22 @@ class FinScanApp:
         except Exception as e:
             safe_error = str(e).encode('ascii', 'replace').decode('ascii')
             self.root.after(0, self.write_to_console, f"Error: {safe_error}")
-            self.root.after(0, self.scraper_completed, False, symbol, None)
-    
     def scraper_completed(self, success, symbol, filename):
+      def scraper_completed(self, success, symbol, filename):
         """Handle completion of scraper process"""
         self.progress_bar.stop()
         self.search_button.config(state=tk.NORMAL)
         
         if success:
             self.progress_label.config(text=f"Data generated successfully for {symbol}!")
-            self.status_var.set(f"Data generated: {filename}")
+            self.status_var.set(f"Data ready: {filename}")
             self.write_to_console(f"[{datetime.now().strftime('%H:%M:%S')}] Data generation complete!")
             
-            # Ask if user wants to open the file
-            if messagebox.askyesno("Success", f"Data for {symbol} generated successfully!\n\nDo you want to open it now?"):
-                self.open_file(filename)
+            # Don't automatically ask to open the file - just notify it's ready
+            self.write_to_console(f"Data saved to {filename} - double-click in file list below to view")
             
-            # Refresh the file list
-            self.refresh_files()
+            # Refresh the file list and select the new file
+            self.refresh_files(select_file=filename)
         else:
             self.progress_label.config(text=f"Error generating data for {symbol}")
             self.status_var.set("Error generating data")
@@ -251,48 +264,75 @@ class FinScanApp:
         """Load an example stock symbol"""
         self.symbol_entry.delete(0, tk.END)
         self.symbol_entry.insert(0, symbol)
-        self.generate_stock_data()
-    
-    def refresh_files(self):
-        """Refresh the list of generated files"""
+    def refresh_files(self, select_file=None):
+      def refresh_files(self, select_file=None):
+        """
+        Refresh the list of generated files
+        
+        Args:
+            select_file: If provided, selects this file in the list after refreshing
+        """
         # Clear existing items
         for item in self.files_tree.get_children():
             self.files_tree.delete(item)
         
-        # Find all HTML files that match our pattern
+        # Create a data directory if it doesn't exist
+        temp_dir = os.path.join(os.getcwd(), "temp_data")
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+        
+        # Find all HTML files that match our pattern (both in current dir and temp_dir)
         files = []
-        for filename in glob.glob("*_data_*.html"):
-            try:
-                # Try to extract symbol from filename
-                parts = filename.split('_data_')
-                if len(parts) == 2:
-                    symbol = parts[0]
-                    # Get file modification time
-                    mod_time = os.path.getmtime(filename)
-                    date_str = datetime.fromtimestamp(mod_time).strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    files.append({
-                        'symbol': symbol,
-                        'date': date_str,
-                        'filename': filename,
-                        'timestamp': mod_time
-                    })
-            except:
-                # Skip files that don't match our pattern
-                continue
+        
+        # Look in current directory and temp directory
+        search_dirs = [".", temp_dir]
+        for search_dir in search_dirs:
+            search_path = os.path.join(search_dir, "*_data_*.html")
+            for filepath in glob.glob(search_path):
+                try:
+                    filename = os.path.basename(filepath)
+                    # Try to extract symbol from filename
+                    parts = filename.split('_data_')
+                    if len(parts) == 2:
+                        symbol = parts[0]
+                        # Get file modification time
+                        mod_time = os.path.getmtime(filepath)
+                        date_str = datetime.fromtimestamp(mod_time).strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        files.append({
+                            'symbol': symbol,
+                            'date': date_str,
+                            'filename': filename,
+                            'filepath': filepath,
+                            'timestamp': mod_time
+                        })
+                except Exception as e:
+                    # Skip files that don't match our pattern
+                    continue
         
         # Sort by timestamp (newest first)
         files.sort(key=lambda x: x['timestamp'], reverse=True)
         
+        # Keep track of the item ID to select
+        item_to_select = None
+        
         # Add to treeview
         for file in files:
-            self.files_tree.insert(
+            item_id = self.files_tree.insert(
                 "", 
                 "end", 
                 values=(file['symbol'], file['date'], file['filename'])
             )
-    
-    def open_selected_file(self, event):
+            
+            # If this is the file to select, keep track of its ID
+            if select_file and file['filename'] == select_file:
+                item_to_select = item_id
+        
+        # Select the specified item if found
+        if item_to_select:
+            self.files_tree.selection_set(item_to_select)
+            self.files_tree.see(item_to_select)  # Ensure it's visible
+      def open_selected_file(self, event):
         """Open the selected file from the treeview"""
         selection = self.files_tree.selection()
         if selection:
@@ -302,15 +342,42 @@ class FinScanApp:
     
     def open_file(self, filename):
         """Open a file in the default browser"""
+        # First check if the file exists in the current directory
         if os.path.exists(filename):
-            # Convert to absolute file path with file:// prefix
             file_path = os.path.abspath(filename)
-            url = f"file://{file_path}"
-            webbrowser.open(url)
-            self.status_var.set(f"Opened {filename}")
         else:
-            messagebox.showerror("Error", f"File not found: {filename}")
-            self.status_var.set(f"File not found: {filename}")
+            # Check in the temp directory
+            temp_path = os.path.join(os.getcwd(), "temp_data", filename)
+            if os.path.exists(temp_path):
+                file_path = temp_path
+            else:
+                messagebox.showerror("Error", f"File not found: {filename}")
+                self.status_var.set(f"File not found: {filename}")
+                return
+        
+        # Convert to URL format and open in browser
+        url = f"file://{os.path.abspath(file_path)}"
+        webbrowser.open(url)
+        self.status_var.set(f"Opened {filename}")
+    
+    def move_to_temp_directory(self, filename):
+        """Move a file to the temporary directory"""
+        if os.path.exists(filename):
+            temp_dir = os.path.join(os.getcwd(), "temp_data")
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir)
+            
+            # Get the destination path
+            dest_path = os.path.join(temp_dir, os.path.basename(filename))
+            
+            # If the file already exists in the temp directory, remove it first
+            if os.path.exists(dest_path):
+                os.remove(dest_path)
+            
+            # Move the file
+            os.rename(filename, dest_path)
+            return dest_path
+        return None
 
 def main():
     root = tk.Tk()

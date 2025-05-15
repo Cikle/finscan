@@ -540,7 +540,7 @@ class StockDataScraper:
         
         print(f"💾 Data saved to {filename}")
         return filename
-    
+        
     def save_html(self, filename=None):
         """Save the collected data as a formatted HTML file"""
         if not filename:
@@ -552,6 +552,7 @@ class StockDataScraper:
         <html>
         <head>
             <title>{self.symbol} Financial Data</title>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <style>
                 body {{ font-family: Arial, sans-serif; margin: 20px; }}
                 h1, h2, h3 {{ color: #333; }}
@@ -586,6 +587,86 @@ class StockDataScraper:
                 }}
                 .hidden {{ display: none; }}
                 #copyArea {{ width: 1px; height: 1px; }}
+                .chart-container {{ 
+                    position: relative; 
+                    height: 250px;
+                    margin-bottom: 20px; 
+                }}
+                .stat-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 15px;
+                    margin: 20px 0;
+                }}
+                .stat-card {{
+                    background-color: #f9f9f9;
+                    border: 1px solid #ddd;
+                    border-radius: 5px;
+                    padding: 15px;
+                    text-align: center;
+                }}
+                .stat-value {{
+                    font-size: 24px;
+                    font-weight: bold;
+                    margin: 10px 0;
+                }}
+                .stat-label {{
+                    color: #666;
+                    font-size: 14px;
+                }}
+                .trend-positive {{
+                    color: #4CAF50;
+                }}
+                .trend-negative {{
+                    color: #f44336;
+                }}
+                .trend-neutral {{
+                    color: #9e9e9e;
+                }}
+                .gauge-container {{
+                    position: relative;
+                    margin: 20px 0;
+                    text-align: center;
+                }}
+                .gauge {{
+                    width: 100%;
+                    max-width: 200px;
+                    margin: 0 auto;
+                }}
+                .rating {{
+                    text-align: center;
+                    font-size: 18px;
+                    margin: 10px 0;
+                    font-weight: bold;
+                }}
+                .rating-strong {{
+                    color: #2e7d32;
+                }}
+                .rating-good {{
+                    color: #4CAF50;
+                }}
+                .rating-neutral {{
+                    color: #9e9e9e;
+                }}
+                .rating-warning {{
+                    color: #f9a825;
+                }}
+                .rating-poor {{
+                    color: #f44336;
+                }}
+                .metrics-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 20px;
+                }}
+                @media (max-width: 768px) {{
+                    .stat-grid {{
+                        grid-template-columns: repeat(2, 1fr);
+                    }}
+                    .metrics-grid {{
+                        grid-template-columns: 1fr;
+                    }}
+                }}
             </style>
         </head>
         <body>
@@ -594,6 +675,70 @@ class StockDataScraper:
             
             <button class="copy-btn" onclick="copyAllData()">Copy All Data for AI Trading</button>
             <textarea id="copyArea" class="hidden"></textarea>
+            
+            <div class="section">
+                <h2>Key Statistics Dashboard</h2>
+                <div class="card">
+                    <div class="stat-grid">
+                        <!-- Market Cap -->
+                        <div class="stat-card">
+                            <div class="stat-label">Market Cap</div>
+                            <div class="stat-value" id="marketCap">-</div>
+                        </div>
+                        
+                        <!-- P/E Ratio -->
+                        <div class="stat-card">
+                            <div class="stat-label">P/E Ratio</div>
+                            <div class="stat-value" id="peRatio">-</div>
+                        </div>
+                        
+                        <!-- Stock Price -->
+                        <div class="stat-card">
+                            <div class="stat-label">Current Price</div>
+                            <div class="stat-value" id="stockPrice">-</div>
+                        </div>
+                        
+                        <!-- Change -->
+                        <div class="stat-card">
+                            <div class="stat-label">Daily Change</div>
+                            <div class="stat-value" id="priceChange">-</div>
+                        </div>
+                        
+                        <!-- Volume -->
+                        <div class="stat-card">
+                            <div class="stat-label">Volume</div>
+                            <div class="stat-value" id="volume">-</div>
+                        </div>
+                        
+                        <!-- Beta -->
+                        <div class="stat-card">
+                            <div class="stat-label">Beta</div>
+                            <div class="stat-value" id="beta">-</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metrics-grid">
+                        <!-- Performance Chart -->
+                        <div>
+                            <h3>Performance Metrics</h3>
+                            <div class="chart-container">
+                                <canvas id="performanceChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- Valuation Gauge -->
+                        <div>
+                            <h3>Analyst Recommendations</h3>
+                            <div class="gauge-container">
+                                <div class="gauge">
+                                    <canvas id="recommendationGauge"></canvas>
+                                </div>
+                                <div class="rating" id="recommendationRating">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             
             <div class="section">
                 <h2>Finviz Data</h2>
@@ -786,8 +931,7 @@ class StockDataScraper:
                     </div>
                 </div>
             """
-        
-        # Add Capital.com data if available
+          # Add Capital.com data if available
         if self.data["capital_com"] and "error" not in self.data["capital_com"]:
             html_content += """
                 <div class="section">
@@ -894,14 +1038,38 @@ class StockDataScraper:
             if "industry" in self.data["competitors"]:
                 html_content += f"Industry: {self.data['competitors']['industry']}\\n"
             
-            # Comparison data
-            if "comparison" in self.data["competitors"] and "this_company" in self.data["competitors"]["comparison"]:
-                html_content += "\\nValuation Metrics:\\n"
-                for key, value in self.data["competitors"]["comparison"]["this_company"].items():
-                    if key != "symbol" and value:
-                        html_content += f"  {key.replace('_', ' ').title()}: {value}\\n"
+            # Comparison data        if "comparison" in self.data["competitors"] and "this_company" in self.data["competitors"]["comparison"]:
+            html_content += "\\nValuation Metrics:\\n"
+            for key, value in self.data["competitors"]["comparison"]["this_company"].items():
+                if key != "symbol" and value:
+                    html_content += f"  {key.replace('_', ' ').title()}: {value}\\n"
         
-        html_content += """`;
+        # Add Capital.com data to the copy text
+        if self.data["capital_com"] and "error" not in self.data["capital_com"]:
+            html_content += """
+                    
+                    === CAPITAL.COM DATA ===
+            """
+            
+            # Format the capital.com data nicely for the text copy
+            capital_data = self.data["capital_com"]
+            
+            # Add the main Capital.com fields
+            html_content += f"Symbol: {capital_data.get('symbol', '')}\\n"
+            html_content += f"Status: {capital_data.get('status', '')}\\n"
+            html_content += f"Timestamp: {capital_data.get('timestamp', '')}\\n"
+            
+            # Add market_data if available
+            if "market_data" in capital_data and isinstance(capital_data["market_data"], dict):
+                html_content += "\\nMarket Data:\\n"
+                for key, value in capital_data["market_data"].items():
+                    html_content += f"  {key}: {value}\\n"
+            
+            # Add any notes
+            if "note" in capital_data:
+                html_content += f"\\nNote: {capital_data['note']}\\n"
+            
+            html_content += """`;
                     
                     const copyArea = document.getElementById('copyArea');
                     copyArea.value = dataText;
@@ -912,6 +1080,211 @@ class StockDataScraper:
                     
                     alert('All data copied to clipboard! Ready to paste into trading AI.');
                 }
+                
+                // Function to populate the dashboard with data
+                function populateDashboard() {
+                    // Get all the stock data from our tables
+                    const stockData = {};                    // Parse Finviz data table - this is where most of our key metrics are
+                    // Get all sections and find the one with Finviz Data
+                    const sections = document.querySelectorAll('.section');
+                    let finvizTable = null;
+                    
+                    for (const section of sections) {
+                        const heading = section.querySelector('h2');
+                        if (heading && heading.textContent.includes('Finviz Data')) {
+                            finvizTable = section.querySelector('table');
+                            break;
+                        }
+                    }
+                    
+                    if (finvizTable) {
+                        const rows = finvizTable.querySelectorAll('tr');
+                        rows.forEach(row => {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length >= 2) {
+                                const key = cells[0].textContent.trim();
+                                const value = cells[1].textContent.trim();
+                                stockData[key] = value;
+                                console.log(`Found Finviz data: ${key} = ${value}`);
+                            }
+                        });
+                    }
+
+                    // Parse Yahoo Finance data table
+                    const yahooTable = document.querySelector('.section:nth-of-type(4) table');
+                    if (yahooTable) {
+                        const rows = yahooTable.querySelectorAll('tr');
+                        rows.forEach(row => {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length >= 2) {
+                                const key = cells[0].textContent.trim();
+                                const value = cells[1].textContent.trim();
+                                stockData[key] = value;
+                            }
+                        });
+                    }
+                    
+                    // Populate key statistics
+                    const elements = {
+                        'marketCap': ['Market Cap', 'marketCap'],
+                        'peRatio': ['P/E', 'trailingPE', 'P/E Ratio'],
+                        'stockPrice': ['Price', 'currentPrice', 'Last Price'],
+                        'priceChange': ['Change', 'priceChange'],
+                        'volume': ['Volume', 'volume', 'Volume'],
+                        'beta': ['Beta', 'beta']
+                    };
+                    
+                    // Try to find each metric in our collected data
+                    for (const [elementId, possibleKeys] of Object.entries(elements)) {
+                        const element = document.getElementById(elementId);
+                        if (element) {
+                            for (const key of possibleKeys) {
+                                if (stockData[key]) {
+                                    element.textContent = stockData[key];
+                                    
+                                    // Special formatting for some fields
+                                    if (elementId === 'priceChange' && stockData[key]) {
+                                        const change = parseFloat(stockData[key]);
+                                        if (!isNaN(change)) {
+                                            if (change > 0) {
+                                                element.classList.add('trend-positive');
+                                                element.textContent = '+' + stockData[key];
+                                            } else if (change < 0) {
+                                                element.classList.add('trend-negative');
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                      // Create the performance chart
+                    const performanceLabels = ['Week', 'Month', 'Quarter', 'Half Year', 'Year', 'YTD'];
+                    const performanceData = [];
+                    const performanceKeys = ['Perf Week', 'Perf Month', 'Perf Quarter', 'Perf Half Y', 'Perf Year', 'Perf YTD'];
+                    
+                    // Collect performance data
+                    for (const key of performanceKeys) {
+                        if (stockData[key]) {
+                            // Extract percentage value, removing % sign
+                            const valueStr = stockData[key].replace('%', '');
+                            const value = parseFloat(valueStr);
+                            performanceData.push(isNaN(value) ? 0 : value);
+                            console.log(`Found performance data: ${key} = ${value}`);
+                        } else {
+                            performanceData.push(0);
+                            console.log(`No data found for ${key}`);
+                        }
+                    }
+                    
+                    // Create performance chart
+                    if (document.getElementById('performanceChart')) {
+                        const ctx = document.getElementById('performanceChart').getContext('2d');
+                        new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: performanceLabels,
+                                datasets: [{
+                                    label: 'Performance (%)',
+                                    data: performanceData,
+                                    backgroundColor: performanceData.map(value => 
+                                        value > 0 ? 'rgba(76, 175, 80, 0.6)' : 'rgba(244, 67, 54, 0.6)'
+                                    ),
+                                    borderColor: performanceData.map(value => 
+                                        value > 0 ? 'rgba(76, 175, 80, 1)' : 'rgba(244, 67, 54, 1)'
+                                    ),
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        title: {
+                                            display: true,
+                                            text: 'Performance (%)'
+                                        },
+                                        ticks: {
+                                            callback: function(value) {
+                                                return value + '%';
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Create analyst recommendation gauge
+                    const recommendationElement = document.getElementById('recommendationRating');
+                    let recommendationValue = 3; // Default neutral
+                    let recommendationText = 'Hold';
+                    
+                    if (stockData['Recom']) {
+                        recommendationValue = parseFloat(stockData['Recom']);
+                        
+                        // Set the text and color based on the value
+                        if (recommendationValue <= 1.5) {
+                            recommendationText = 'Strong Buy';
+                            recommendationElement.className = 'rating rating-strong';
+                        } else if (recommendationValue <= 2.5) {
+                            recommendationText = 'Buy';
+                            recommendationElement.className = 'rating rating-good';
+                        } else if (recommendationValue <= 3.5) {
+                            recommendationText = 'Hold';
+                            recommendationElement.className = 'rating rating-neutral';
+                        } else if (recommendationValue <= 4.5) {
+                            recommendationText = 'Sell';
+                            recommendationElement.className = 'rating rating-warning';
+                        } else {
+                            recommendationText = 'Strong Sell';
+                            recommendationElement.className = 'rating rating-poor';
+                        }
+                        
+                        recommendationElement.textContent = `${recommendationText} (${recommendationValue})`;
+                    }
+                    
+                    // Create the recommendation gauge chart
+                    if (document.getElementById('recommendationGauge')) {
+                        const ctx = document.getElementById('recommendationGauge').getContext('2d');
+                        
+                        new Chart(ctx, {
+                            type: 'doughnut',
+                            data: {
+                                datasets: [{
+                                    data: [recommendationValue, 5 - recommendationValue],
+                                    backgroundColor: [
+                                        recommendationValue <= 1.5 ? '#2e7d32' : 
+                                        recommendationValue <= 2.5 ? '#4CAF50' : 
+                                        recommendationValue <= 3.5 ? '#9e9e9e' : 
+                                        recommendationValue <= 4.5 ? '#f9a825' : '#f44336',
+                                        'rgba(220, 220, 220, 0.5)'
+                                    ],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '70%',
+                                plugins: {
+                                    tooltip: {
+                                        enabled: false
+                                    },
+                                    legend: {
+                                        display: false
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+                
+                // Run the dashboard population when the page loads
+                document.addEventListener('DOMContentLoaded', populateDashboard);
             </script>
         </body>
         </html>

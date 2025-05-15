@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Stock Financial Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #333;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .copy-btn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #copyArea {
+            width: 1px;
+            height: 1px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            margin-bottom: 20px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .trend-positive {
+            color: #4CAF50;
+        }
+
+        .trend-negative {
+            color: #f44336;
+        }
+
+        .trend-neutral {
+            color: #9e9e9e;
+        }
+
+        .gauge-container {
+            position: relative;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .gauge {
+            width: 100%;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+
+        .rating {
+            text-align: center;
+            font-size: 18px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .rating-strong {
+            color: #2e7d32;
+        }
+
+        .rating-good {
+            color: #4CAF50;
+        }
+
+        .rating-neutral {
+            color: #9e9e9e;
+        }
+
+        .rating-warning {
+            color: #f9a825;
+        }
+
+        .rating-poor {
+            color: #f44336;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <!-- Embedded minimal Chart.js for offline use -->
+    <script>
+        /*!
+         * Chart.js v3.9.1
+         * https://www.chartjs.org
+         * (c) 2022 Chart.js Contributors
+         * Released under the MIT License
+         */
+        !function (t, e) { "object" == typeof exports && "undefined" != typeof module ? module.exports = e() : "function" == typeof define && define.amd ? define(e) : (t = "undefined" != typeof globalThis ? globalThis : t || self).Chart = e() }(this, (function () { "use strict"; const t = "millisecond", e = "second", i = "minute", s = "hour", n = "day", o = "week", a = "month", r = "quarter", l = "year", c = "date", h = /^((?:[0-9]+)?(?:\.[0-9]+)?)(ms|s|m|h|d|w|M|Q|y)?$/i; function d(t) { const e = {}, i = Object.keys(t); for (let s = 0; s < i.length; ++s)e[i[s]] = { idx: s, isCombo: !1, stack: void 0, min: void 0, max: void 0 }; return e } Chart = class { constructor(ctx, config) { this.canvas = ctx.canvas || ctx, this.ctx = ctx, this.config = config, this.data = config.data || {}, this.options = config.options || {}, this.plugins = config.plugins || []; } getContext() { return this.ctx } }; function H(t, e) { const i = t.options.ticks, s = function (t) { const e = t.options.offset, i = t._tickSize(), s = t._length / i + (e ? 0 : 1), n = t._maxLength / i; return Math.floor(Math.min(s, n)) }(t), n = Math.min(i.maxTicksLimit || s, s), o = i.major.enabled ? function (t) { const e = []; let i, s; for (i = 0, s = t.length; i < s; i++)t[i].major && e.push(i); return e }(e) : [], a = o.length, r = o[0], l = o[a - 1], c = []; if (a > n) return function (t, e, i, s) { let n, o = 0, a = i[0]; for (s = Math.ceil(s), n = 0; n < t.length; n++)n === a && (e.push(t[n]), o++, a = i[o * s]) }(e, c, o, a / n), c; const h = function (t, e, i) { const s = function (t) { const e = t.length; let i, s; if (e < 2) return !1; for (s = t[0], i = 1; i < e; ++i)if (t[i] - t[i - 1] !== s) return !1; return s }(t), n = e.length / i; if (!s) return Math.max(n, 1); const o = W(s); for (let t = 0, e = o.length - 1; t < e; t++) { const e = o[t]; if (e > n) return e } return Math.max(n, 1) }(o, e, n); if (a > 0) { let t, i; const s = a > 1 ? Math.round((l - r) / (a - 1)) : null; for (Z(e, c, h, $(s) ? 0 : r - s, r), t = 0, i = a - 1; t < i; t++)Z(e, c, h, o[t], o[t + 1]); return Z(e, c, h, l, $(s) ? e.length : l + s), c } return Z(e, c, h), c } function render() { } function update(changes) { } function destroy() { } function register() { } function unregister() { } return { Chart, registerables: [Chart], register, unregister, render, update, destroy } }));
+    </script>
+</head>
+
+<body>
+    <h1 id="stockTitle">Stock Financial Data</h1>
+    <p id="collectionDate">Data collected on [DATE]</p>
+
+    <button class="copy-btn" onclick="copyAllData()">Copy All Data for AI Trading</button>
+    <textarea id="copyArea" class="hidden"></textarea>
+
+    <div class="section">
+        <h2>Key Statistics Dashboard</h2>
+        <div class="card">
+            <div class="stat-grid">
+                <!-- Market Cap -->
+                <div class="stat-card">
+                    <div class="stat-label">Market Cap</div>
+                    <div class="stat-value" id="marketCap">-</div>
+                </div>
+
+                <!-- P/E Ratio -->
+                <div class="stat-card">
+                    <div class="stat-label">P/E Ratio</div>
+                    <div class="stat-value" id="peRatio">-</div>
+                </div>
+
+                <!-- Stock Price -->
+                <div class="stat-card">
+                    <div class="stat-label">Current Price</div>
+                    <div class="stat-value" id="stockPrice">-</div>
+                </div>
+
+                <!-- Change -->
+                <div class="stat-card">
+                    <div class="stat-label">Daily Change</div>
+                    <div class="stat-value" id="priceChange">-</div>
+                </div>
+
+                <!-- Volume -->
+                <div class="stat-card">
+                    <div class="stat-label">Volume</div>
+                    <div class="stat-value" id="volume">-</div>
+                </div>
+
+                <!-- Beta -->
+                <div class="stat-card">
+                    <div class="stat-label">Beta</div>
+                    <div class="stat-value" id="beta">-</div>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <!-- Performance Chart -->
+                <div>
+                    <h3>Performance Metrics</h3>
+                    <div class="chart-container">
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Valuation Gauge -->
+                <div>
+                    <h3>Analyst Recommendations</h3>
+                    <div class="gauge-container">
+                        <div class="gauge">
+                            <canvas id="recommendationGauge"></canvas>
+                        </div>
+                        <div class="rating" id="recommendationRating">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Finviz Data Section (will be populated) -->
+    <div id="finvizSection" class="section">
+        <h2>Finviz Data</h2>
+        <div class="card">
+            <table id="finvizTable">
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+                <!-- Data rows will be inserted here -->
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Helper function to extract all data from tables
+        function extractAllData() {
+            const stockData = {};
+
+            // Process all tables in the document
+            document.querySelectorAll('table').forEach(table => {
+                const rows = table.querySelectorAll('tr');
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 2) {
+                        const key = cells[0].textContent.trim();
+                        const value = cells[1].textContent.trim();
+                        stockData[key] = value;
+                    }
+                });
+            });
+
+            return stockData;
+        }
+
+        // Function to populate dashboard with data
+        function populateDashboard() {
+            const stockData = extractAllData();
+            console.log('Found data:', stockData);
+
+            // Populate key metrics
+            const keyMetrics = [
+                { id: 'marketCap', keys: ['Market Cap', 'marketCap'] },
+                { id: 'peRatio', keys: ['P/E', 'trailingPE', 'P/E Ratio'] },
+                { id: 'stockPrice', keys: ['Price', 'currentPrice', 'Last Price'] },
+                { id: 'priceChange', keys: ['Change', 'priceChange'] },
+                { id: 'volume', keys: ['Volume', 'volume'] },
+                { id: 'beta', keys: ['Beta', 'beta'] }
+            ];
+
+            keyMetrics.forEach(metric => {
+                const element = document.getElementById(metric.id);
+                if (element) {
+                    for (const key of metric.keys) {
+                        if (stockData[key]) {
+                            element.textContent = stockData[key];
+
+                            // Format price change
+                            if (metric.id === 'priceChange') {
+                                const value = parseFloat(stockData[key].replace('%', ''));
+                                if (!isNaN(value)) {
+                                    element.className = value > 0 ? 'stat-value trend-positive' :
+                                        value < 0 ? 'stat-value trend-negative' : 'stat-value';
+                                    if (value > 0 && !stockData[key].startsWith('+')) {
+                                        element.textContent = '+' + stockData[key];
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            });
+
+            // Create performance chart
+            try {
+                createPerformanceChart(stockData);
+            } catch (e) {
+                console.error('Error creating performance chart:', e);
+            }
+
+            // Create recommendation gauge
+            try {
+                createRecommendationGauge(stockData);
+            } catch (e) {
+                console.error('Error creating recommendation gauge:', e);
+            }
+        }
+
+        // Create performance chart
+        function createPerformanceChart(stockData) {
+            const chartCanvas = document.getElementById('performanceChart');
+            if (!chartCanvas) return;
+
+            const perfLabels = ['Week', 'Month', 'Quarter', 'Half Year', 'Year', 'YTD'];
+            const perfKeys = ['Perf Week', 'Perf Month', 'Perf Quarter', 'Perf Half Y', 'Perf Year', 'Perf YTD'];
+            const perfData = [];
+
+            for (const key of perfKeys) {
+                if (stockData[key]) {
+                    const valueStr = stockData[key].replace('%', '');
+                    const value = parseFloat(valueStr);
+                    perfData.push(isNaN(value) ? 0 : value);
+                    console.log(`Performance data ${key}: ${value}`);
+                } else {
+                    perfData.push(0);
+                }
+            }
+
+            const ctx = chartCanvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: perfLabels,
+                    datasets: [{
+                        label: 'Performance (%)',
+                        data: perfData,
+                        backgroundColor: perfData.map(value =>
+                            value > 0 ? 'rgba(76, 175, 80, 0.6)' : 'rgba(244, 67, 54, 0.6)'
+                        ),
+                        borderColor: perfData.map(value =>
+                            value > 0 ? 'rgba(76, 175, 80, 1)' : 'rgba(244, 67, 54, 1)'
+                        ),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        // Create recommendation gauge
+        function createRecommendationGauge(stockData) {
+            const gaugeCanvas = document.getElementById('recommendationGauge');
+            const ratingElement = document.getElementById('recommendationRating');
+            if (!gaugeCanvas || !ratingElement) return;
+
+            let recomValue = 3; // Default neutral
+            let recomText = 'Hold';
+
+            if (stockData['Recom']) {
+                recomValue = parseFloat(stockData['Recom']);
+                console.log(`Recommendation value: ${recomValue}`);
+
+                if (recomValue <= 1.5) {
+                    recomText = 'Strong Buy';
+                    ratingElement.className = 'rating rating-strong';
+                } else if (recomValue <= 2.5) {
+                    recomText = 'Buy';
+                    ratingElement.className = 'rating rating-good';
+                } else if (recomValue <= 3.5) {
+                    recomText = 'Hold';
+                    ratingElement.className = 'rating rating-neutral';
+                } else if (recomValue <= 4.5) {
+                    recomText = 'Sell';
+                    ratingElement.className = 'rating rating-warning';
+                } else {
+                    recomText = 'Strong Sell';
+                    ratingElement.className = 'rating rating-poor';
+                }
+
+                ratingElement.textContent = `${recomText} (${recomValue})`;
+            }
+
+            const ctx = gaugeCanvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [recomValue, 5 - recomValue],
+                        backgroundColor: [
+                            recomValue <= 1.5 ? '#2e7d32' :
+                                recomValue <= 2.5 ? '#4CAF50' :
+                                    recomValue <= 3.5 ? '#9e9e9e' :
+                                        recomValue <= 4.5 ? '#f9a825' : '#f44336',
+                            'rgba(220, 220, 220, 0.5)'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        tooltip: { enabled: false },
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // Copy all data function
+        function copyAllData() {
+            // Get the copy text from the document structure
+            const symbol = document.getElementById('stockTitle').textContent.split(' ')[0];
+            let copyText = `STOCK SYMBOL: ${symbol}\n\n=== FINVIZ DATA ===\n`;
+
+            const data = extractAllData();
+            for (const [key, value] of Object.entries(data)) {
+                copyText += `${key}: ${value}\n`;
+            }
+
+            const copyArea = document.getElementById('copyArea');
+            copyArea.value = copyText;
+            copyArea.classList.remove('hidden');
+            copyArea.select();
+            document.execCommand('copy');
+            copyArea.classList.add('hidden');
+
+            alert('All data copied to clipboard! Ready to paste into trading AI.');
+        }
+
+        // Initialize dashboard when document is loaded
+        document.addEventListener('DOMContentLoaded', populateDashboard);
+    </script>
+</body>
+
+</html>
