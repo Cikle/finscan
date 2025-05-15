@@ -185,6 +185,41 @@
     <h1 id="stockTitle">Stock Financial Data</h1>
     <p id="collectionDate">Data collected on [DATE]</p>
 
+    <!-- Insider Trading Summary at the top -->
+    <div id="insiderSummaryTop"
+        style="margin: 20px 0; padding: 15px; border-radius: 8px; background-color: #f9f9f9; border-left: 5px solid #4CAF50; display: none;">
+        <h2 style="margin-top: 0; margin-bottom: 10px; color: #333;">Insider Trading Summary</h2>
+        <div style="display: flex; align-items: center;">
+            <div style="flex: 1;">
+                <div style="font-size: 18px; margin-bottom: 10px;">
+                    <span id="insiderSignalText" style="font-weight: bold;">Analyzing insider activity...</span>
+                </div>
+                <div id="insiderDetailsText" style="font-size: 16px;">Loading insider data...</div>
+            </div>
+            <div style="flex: 1; text-align: right;">
+                <div style="font-size: 24px; font-weight: bold;">
+                    Ratio: <span id="insiderRatioTop">-</span>
+                </div>
+                <div style="margin-top: 5px; font-size: 14px;">
+                    <span id="insiderCountsTop">-</span>
+                </div>
+            </div>
+        </div>
+        <div
+            style="margin-top: 15px; height: 30px; border-radius: 15px; overflow: hidden; background-color: #e0e0e0; position: relative;">
+            <div id="insiderBuyBar"
+                style="height: 100%; width: 50%; background-color: #4CAF50; position: absolute; left: 0; transition: width 0.5s ease-in-out;">
+            </div>
+            <div id="insiderSellBar"
+                style="height: 100%; width: 50%; background-color: #f44336; position: absolute; right: 0; transition: width 0.5s ease-in-out;">
+            </div>
+            <div
+                style="position: relative; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; text-shadow: 0px 0px 2px rgba(0,0,0,0.5); z-index: 1;">
+                <span id="insiderBarText">Loading...</span>
+            </div>
+        </div>
+    </div>
+
     <button class="copy-btn" onclick="copyAllData()">Copy All Data for AI Trading</button>
     <textarea id="copyArea" class="hidden"></textarea>
 
@@ -290,7 +325,9 @@
             });
 
             return stockData;
-        }        // Function to populate dashboard with data
+        }
+
+        // Function to populate dashboard with data
         function populateDashboard() {
             const stockData = extractAllData();
             console.log('Found data:', stockData);
@@ -353,6 +390,9 @@
                                             const buyCount = parseInt(stockData['Buy Count']);
                                             const sellCount = parseInt(stockData['Sell Count']);
                                             insiderActivity.textContent = `${buyCount} buys, ${sellCount} sells`;
+
+                                            // Also update the top insider summary
+                                            updateTopInsiderSummary(buyCount, sellCount);
                                         }
                                     }
                                 }
@@ -481,33 +521,97 @@
                     }
                 }
             });
-        }        // Copy all data function
+        }
+
+        // Function to update the top insider trading summary
+        function updateTopInsiderSummary(buyCount, sellCount) {
+            const summaryDiv = document.getElementById('insiderSummaryTop');
+            const signalText = document.getElementById('insiderSignalText');
+            const detailsText = document.getElementById('insiderDetailsText');
+            const ratioText = document.getElementById('insiderRatioTop');
+            const countsText = document.getElementById('insiderCountsTop');
+            const buyBar = document.getElementById('insiderBuyBar');
+            const sellBar = document.getElementById('insiderSellBar');
+            const barText = document.getElementById('insiderBarText');
+
+            if (!summaryDiv || !signalText || !detailsText || !ratioText || !countsText || !buyBar || !sellBar || !barText) return;
+
+            // Show the summary div
+            summaryDiv.style.display = 'block';
+
+            // Set the ratio
+            ratioText.textContent = `${buyCount}:${sellCount}`;
+
+            // Set the counts
+            countsText.textContent = `${buyCount + sellCount} total transactions`;
+
+            // Calculate percentages for the bars
+            const total = buyCount + sellCount;
+            if (total === 0) return;
+
+            const buyPercent = (buyCount / total) * 100;
+            const sellPercent = (sellCount / total) * 100;
+
+            // Update the bar widths
+            buyBar.style.width = buyPercent + '%';
+            sellBar.style.width = sellPercent + '%';
+            barText.textContent = `${buyCount} Buys (${Math.round(buyPercent)}%) vs ${sellCount} Sells (${Math.round(sellPercent)}%)`;
+
+            // Update the border color based on signal
+            let signalColor = '#9e9e9e'; // neutral
+            let signalMessage = 'Neutral Insider Activity';
+            let details = 'Insiders are buying and selling at similar rates';
+
+            // Determine the signal
+            if (buyCount > 0 && sellCount === 0) {
+                signalColor = '#2e7d32'; // strong bullish
+                signalMessage = 'STRONG BULLISH SIGNAL';
+                details = 'Insiders are ONLY buying, no selling activity';
+                summaryDiv.style.borderLeftColor = '#2e7d32';
+            } else if (buyCount > sellCount * 3) {
+                signalColor = '#2e7d32'; // strong bullish
+                signalMessage = 'STRONG BULLISH SIGNAL';
+                details = 'Insiders are buying significantly more than selling';
+                summaryDiv.style.borderLeftColor = '#2e7d32';
+            } else if (buyCount > sellCount) {
+                signalColor = '#4CAF50'; // bullish
+                signalMessage = 'BULLISH SIGNAL';
+                details = 'Insiders are buying more than selling';
+                summaryDiv.style.borderLeftColor = '#4CAF50';
+            } else if (sellCount > 0 && buyCount === 0) {
+                signalColor = '#c62828'; // strong bearish
+                signalMessage = 'STRONG BEARISH SIGNAL';
+                details = 'Insiders are ONLY selling, no buying activity';
+                summaryDiv.style.borderLeftColor = '#c62828';
+            } else if (sellCount > buyCount * 3) {
+                signalColor = '#c62828'; // strong bearish
+                signalMessage = 'STRONG BEARISH SIGNAL';
+                details = 'Insiders are selling significantly more than buying';
+                summaryDiv.style.borderLeftColor = '#c62828';
+            } else if (sellCount > buyCount) {
+                signalColor = '#f44336'; // bearish
+                signalMessage = 'BEARISH SIGNAL';
+                details = 'Insiders are selling more than buying';
+                summaryDiv.style.borderLeftColor = '#f44336';
+            } else {
+                // Neutral - keep default values
+                summaryDiv.style.borderLeftColor = '#9e9e9e';
+            }
+
+            signalText.textContent = signalMessage;
+            signalText.style.color = signalColor;
+            detailsText.textContent = details;
+        }
+
+        // Copy all data function
         function copyAllData() {
             // Get the copy text from the document structure
             const symbol = document.getElementById('stockTitle').textContent.split(' ')[0];
             let copyText = `STOCK SYMBOL: ${symbol}\n\n=== FINVIZ DATA ===\n`;
 
             const data = extractAllData();
-
-            // Organize data by section for better readability
-            const insiderData = {};
-
-            // Extract all data first
             for (const [key, value] of Object.entries(data)) {
-                // Collect insider trading data separately
-                if (['Buy Count', 'Sell Count', 'Buy/Sell Ratio', 'Trade Count'].includes(key)) {
-                    insiderData[key] = value;
-                } else {
-                    copyText += `${key}: ${value}\n`;
-                }
-            }
-
-            // Add insider trading data as a separate section if available
-            if (Object.keys(insiderData).length > 0) {
-                copyText += `\n=== INSIDER TRADING ===\n`;
-                for (const [key, value] of Object.entries(insiderData)) {
-                    copyText += `${key}: ${value}\n`;
-                }
+                copyText += `${key}: ${value}\n`;
             }
 
             const copyArea = document.getElementById('copyArea');
@@ -526,3 +630,4 @@
 </body>
 
 </html>
+```
