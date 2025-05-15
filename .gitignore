@@ -1,1 +1,4 @@
 config.json
+*_data_*.html
+__pycache__/
+*.pyc
