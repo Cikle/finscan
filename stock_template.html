@@ -220,12 +220,17 @@
                 <div class="stat-card">
                     <div class="stat-label">Volume</div>
                     <div class="stat-value" id="volume">-</div>
-                </div>
-
-                <!-- Beta -->
+                </div> <!-- Beta -->
                 <div class="stat-card">
                     <div class="stat-label">Beta</div>
                     <div class="stat-value" id="beta">-</div>
+                </div>
+
+                <!-- Insider Trading -->
+                <div class="stat-card">
+                    <div class="stat-label">Insider Trading</div>
+                    <div class="stat-value" id="insiderRatio">-</div>
+                    <div id="insiderActivity" style="font-size: 12px; margin-top: 5px;"></div>
                 </div>
             </div>
 
@@ -285,9 +290,7 @@
             });
 
             return stockData;
-        }
-
-        // Function to populate dashboard with data
+        }        // Function to populate dashboard with data
         function populateDashboard() {
             const stockData = extractAllData();
             console.log('Found data:', stockData);
@@ -299,10 +302,9 @@
                 { id: 'stockPrice', keys: ['Price', 'currentPrice', 'Last Price'] },
                 { id: 'priceChange', keys: ['Change', 'priceChange'] },
                 { id: 'volume', keys: ['Volume', 'volume'] },
-                { id: 'beta', keys: ['Beta', 'beta'] }
-            ];
-
-            keyMetrics.forEach(metric => {
+                { id: 'beta', keys: ['Beta', 'beta'] },
+                { id: 'insiderRatio', keys: ['Buy/Sell Ratio'] }
+            ]; keyMetrics.forEach(metric => {
                 const element = document.getElementById(metric.id);
                 if (element) {
                     for (const key of metric.keys) {
@@ -317,6 +319,41 @@
                                         value < 0 ? 'stat-value trend-negative' : 'stat-value';
                                     if (value > 0 && !stockData[key].startsWith('+')) {
                                         element.textContent = '+' + stockData[key];
+                                    }
+                                }
+                            }
+
+                            // Format insider trading ratio
+                            if (metric.id === 'insiderRatio') {
+                                const insiderActivity = document.getElementById('insiderActivity');
+                                if (insiderActivity) {
+                                    // Extract buy and sell counts from the ratio (e.g., "3:1")
+                                    const parts = stockData[key].split(':');
+                                    if (parts.length === 2) {
+                                        const buyCount = parseInt(parts[0]);
+                                        const sellCount = parseInt(parts[1]);
+
+                                        // Color the ratio based on buy vs sell ratio
+                                        if (buyCount > sellCount) {
+                                            element.className = 'stat-value trend-positive';
+                                            insiderActivity.textContent = 'More buys than sells (Bullish)';
+                                            insiderActivity.style.color = '#4CAF50';
+                                        } else if (sellCount > buyCount) {
+                                            element.className = 'stat-value trend-negative';
+                                            insiderActivity.textContent = 'More sells than buys (Bearish)';
+                                            insiderActivity.style.color = '#f44336';
+                                        } else {
+                                            element.className = 'stat-value trend-neutral';
+                                            insiderActivity.textContent = 'Neutral insider activity';
+                                            insiderActivity.style.color = '#9e9e9e';
+                                        }
+
+                                        // If we have exact counts, show them
+                                        if (stockData['Buy Count'] && stockData['Sell Count']) {
+                                            const buyCount = parseInt(stockData['Buy Count']);
+                                            const sellCount = parseInt(stockData['Sell Count']);
+                                            insiderActivity.textContent = `${buyCount} buys, ${sellCount} sells`;
+                                        }
                                     }
                                 }
                             }
@@ -444,17 +481,33 @@
                     }
                 }
             });
-        }
-
-        // Copy all data function
+        }        // Copy all data function
         function copyAllData() {
             // Get the copy text from the document structure
             const symbol = document.getElementById('stockTitle').textContent.split(' ')[0];
             let copyText = `STOCK SYMBOL: ${symbol}\n\n=== FINVIZ DATA ===\n`;
 
             const data = extractAllData();
+
+            // Organize data by section for better readability
+            const insiderData = {};
+
+            // Extract all data first
             for (const [key, value] of Object.entries(data)) {
-                copyText += `${key}: ${value}\n`;
+                // Collect insider trading data separately
+                if (['Buy Count', 'Sell Count', 'Buy/Sell Ratio', 'Trade Count'].includes(key)) {
+                    insiderData[key] = value;
+                } else {
+                    copyText += `${key}: ${value}\n`;
+                }
+            }
+
+            // Add insider trading data as a separate section if available
+            if (Object.keys(insiderData).length > 0) {
+                copyText += `\n=== INSIDER TRADING ===\n`;
+                for (const [key, value] of Object.entries(insiderData)) {
+                    copyText += `${key}: ${value}\n`;
+                }
             }
 
             const copyArea = document.getElementById('copyArea');

@@ -196,6 +196,13 @@ Beta: 1.20"></textarea>
                     <div class="stat-label">Beta</div>
                     <div class="stat-value" id="beta">-</div>
                 </div>
+
+                <!-- Insider Trading -->
+                <div class="stat-card">
+                    <div class="stat-label">Insider Trading</div>
+                    <div class="stat-value" id="insiderRatio">-</div>
+                    <div id="insiderActivity" style="font-size: 12px; margin-top: 5px;"></div>
+                </div>
             </div>
         </div>
 
@@ -238,38 +245,64 @@ Beta: 1.20"></textarea>
             return data;
         }
 
-        // Update key metrics
-        function updateKeyMetrics(data) {
-            const metrics = [
-                { id: 'marketCap', keys: ['Market Cap'] },
-                { id: 'peRatio', keys: ['P/E'] },
-                { id: 'stockPrice', keys: ['Price'] },
-                { id: 'priceChange', keys: ['Change'] },
-                { id: 'volume', keys: ['Volume'] },
-                { id: 'beta', keys: ['Beta'] }
-            ];
+        // Update key metrics        function updateKeyMetrics(data) {
+        const metrics = [
+            { id: 'marketCap', keys: ['Market Cap'] },
+            { id: 'peRatio', keys: ['P/E'] },
+            { id: 'stockPrice', keys: ['Price'] },
+            { id: 'priceChange', keys: ['Change'] },
+            { id: 'volume', keys: ['Volume'] },
+            { id: 'beta', keys: ['Beta'] },
+            { id: 'insiderRatio', keys: ['Buy/Sell Ratio'] }
+        ]; for (const metric of metrics) {
+            const element = document.getElementById(metric.id);
+            if (element) {
+                for (const key of metric.keys) {
+                    if (data[key]) {
+                        element.textContent = data[key];
 
-            for (const metric of metrics) {
-                const element = document.getElementById(metric.id);
-                if (element) {
-                    for (const key of metric.keys) {
-                        if (data[key]) {
-                            element.textContent = data[key];
+                        // Format price change
+                        if (metric.id === 'priceChange') {
+                            const value = parseFloat(data[key]);
+                            if (!isNaN(value)) {
+                                element.className = value > 0 ? 'stat-value trend-positive' :
+                                    value < 0 ? 'stat-value trend-negative' : 'stat-value';
+                            }
+                        }
 
-                            // Format price change
-                            if (metric.id === 'priceChange') {
-                                const value = parseFloat(data[key]);
-                                if (!isNaN(value)) {
-                                    element.className = value > 0 ? 'stat-value trend-positive' :
-                                        value < 0 ? 'stat-value trend-negative' : 'stat-value';
+                        // Format insider trading ratio
+                        if (metric.id === 'insiderRatio') {
+                            const insiderActivity = document.getElementById('insiderActivity');
+                            if (insiderActivity) {
+                                // Extract buy and sell counts from the ratio (e.g., "3:1")
+                                const parts = data[key].split(':');
+                                if (parts.length === 2) {
+                                    const buyCount = parseInt(parts[0]);
+                                    const sellCount = parseInt(parts[1]);
+
+                                    // Color the ratio based on buy vs sell ratio
+                                    if (buyCount > sellCount) {
+                                        element.className = 'stat-value trend-positive';
+                                        insiderActivity.textContent = 'More buys than sells (Bullish)';
+                                        insiderActivity.style.color = '#4CAF50';
+                                    } else if (sellCount > buyCount) {
+                                        element.className = 'stat-value trend-negative';
+                                        insiderActivity.textContent = 'More sells than buys (Bearish)';
+                                        insiderActivity.style.color = '#f44336';
+                                    } else {
+                                        element.className = 'stat-value trend-neutral';
+                                        insiderActivity.textContent = 'Neutral insider activity';
+                                        insiderActivity.style.color = '#9e9e9e';
+                                    }
                                 }
                             }
-                            break;
                         }
+                        break;
                     }
                 }
             }
         }
+
 
         // Create performance chart
         function createPerformanceChart(data) {
