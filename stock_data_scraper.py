@@ -222,96 +222,159 @@ class StockDataScraper:
         return self.data["openinsider"]
     
     def get_yahoo_finance_data(self):
-        """Get Yahoo Finance data using a more robust approach to avoid rate limiting"""
+        """Get Yahoo Finance data using multiple fallback strategies to avoid rate limiting"""
         try:
             print("ℹ️ Attempting to fetch Yahoo Finance data...")
             
-            # Use a longer delay between requests
-            time.sleep(3)
-            
-            # Use a more direct, minimalist approach
+            # STRATEGY 1: Use yfinance library directly first - it's more reliable
             try:
-                # Custom headers to avoid looking like a bot
-                custom_headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                }
+                time.sleep(1)
+                print("📊 Trying yfinance library...")
                 
-                # Try to use a different Yahoo Finance endpoint that might be less rate-limited
-                url = f"https://finance.yahoo.com/quote/{self.symbol}/key-statistics"
-                response = requests.get(url, headers=custom_headers)
+                ticker = yf.Ticker(self.symbol)
                 
-                if response.status_code == 200:
-                    soup = BeautifulSoup(response.text, 'html.parser')
+                # Basic info - usually works even when rate limited
+                try:
+                    info = ticker.fast_info
+                    if hasattr(info, 'last_price') and info.last_price is not None:
+                        self.data["yahoo_finance"]["currentPrice"] = round(info.last_price, 2)
+                    if hasattr(info, 'day_volume') and info.day_volume is not None:
+                        self.data["yahoo_finance"]["volume"] = info.day_volume
+                    if hasattr(info, 'market_cap') and info.market_cap is not None:
+                        self.data["yahoo_finance"]["marketCap"] = info.market_cap
+                except Exception:
+                    pass
+                
+                # Try getting the company info - may fail when rate limited
+                try:
+                    # This might fetch basic data like company name, sector, etc.
+                    time.sleep(1)  # Extra delay before info request
+                    company_info = ticker.info
                     
-                    # Extract data from tables on the statistics page
-                    tables = soup.find_all('table')
-                    for table in tables:
-                        rows = table.find_all('tr')
-                        for row in rows:
-                            cells = row.find_all('td')
-                            if len(cells) >= 2:
-                                key = cells[0].text.strip()
-                                value = cells[1].text.strip()
-                                self.data["yahoo_finance"][key] = value
+                    # Extract the most useful fields
+                    key_fields = [
+                        'shortName', 'longName', 'sector', 'industry', 'website', 
+                        'marketCap', 'forwardPE', 'trailingPE', 'beta',
+                        'dividendYield', 'fiftyTwoWeekLow', 'fiftyTwoWeekHigh'
+                    ]
                     
-                    # Try to get the company name
-                    h1_element = soup.find('h1')
-                    if h1_element:
-                        company_name = h1_element.text.split('(')[0].strip()
-                        self.data["yahoo_finance"]["shortName"] = company_name
+                    for field in key_fields:
+                        if field in company_info and company_info[field] is not None:
+                            self.data["yahoo_finance"][field] = company_info[field]
+                except Exception as e:
+                    print(f"ℹ️ Full company info not available: {e}")
+                
+                # Try getting just basic price data as a last resort
+                if not self.data["yahoo_finance"]:
+                    time.sleep(1)
+                    hist = ticker.history(period="2d")
+                    if not hist.empty:
+                        last_row = hist.iloc[-1]
+                        self.data["yahoo_finance"]["currentPrice"] = round(float(last_row["Close"]), 2)
+                        self.data["yahoo_finance"]["previousClose"] = round(float(hist.iloc[-2]["Close"]), 2)
+                
+                if self.data["yahoo_finance"]:
+                    print("✅ Yahoo Finance data collected via yfinance library")
+            except Exception as e:
+                print(f"⚠️ yfinance approach failed: {e}")
+            
+            # STRATEGY 2: If yfinance failed, try direct HTML scraping with browser-like headers
+            if not self.data["yahoo_finance"]:
+                time.sleep(2)  # Wait before trying direct HTML
+                try:
+                    print("🌐 Trying direct HTML scraping...")
+                    # More browser-like headers to avoid detection
+                    custom_headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Cache-Control': 'max-age=0',
+                        'sec-ch-ua': '" Not A;Brand";v="99", "Chromium";v="100", "Google Chrome";v="100"',
+                        'sec-ch-ua-mobile': '?0',
+                        'sec-ch-ua-platform': '"Windows"',
+                    }
                     
-                    print("✅ Yahoo Finance statistics data collected")
-                else:
-                    # If statistics page fails, try the main quote page
-                    url = f"https://finance.yahoo.com/quote/{self.symbol}"
+                    # Try a different Yahoo Finance URL that might be less protected
+                    url = f"https://finance.yahoo.com/quote/{self.symbol}/profile"
                     response = requests.get(url, headers=custom_headers)
                     
                     if response.status_code == 200:
                         soup = BeautifulSoup(response.text, 'html.parser')
                         
-                        # Extract the stock price
-                        try:
-                            price_element = soup.find('fin-streamer', {'data-field': 'regularMarketPrice'})
-                            if price_element:
-                                self.data["yahoo_finance"]["currentPrice"] = price_element.text
-                        except Exception:
-                            pass
+                        # Try to extract company name, sector, industry
+                        h1_tags = soup.find_all('h1')
+                        for h1 in h1_tags:
+                            if self.symbol.lower() in h1.text.lower():
+                                self.data["yahoo_finance"]["shortName"] = h1.text.split('(')[0].strip()
+                                break
                         
-                        # Extract company name
-                        try:
-                            name_element = soup.find('h1')
-                            if name_element:
-                                self.data["yahoo_finance"]["shortName"] = name_element.text.split('(')[0].strip()
-                        except Exception:
-                            pass
+                        # Look for sector and industry info
+                        spans = soup.find_all('span')
+                        for i, span in enumerate(spans):
+                            if span.text.strip() == "Sector":
+                                if i + 1 < len(spans):
+                                    self.data["yahoo_finance"]["sector"] = spans[i+1].text.strip()
+                            if span.text.strip() == "Industry":
+                                if i + 1 < len(spans):
+                                    self.data["yahoo_finance"]["industry"] = spans[i+1].text.strip()
+                            if span.text.strip() == "Full Time Employees":
+                                if i + 1 < len(spans):
+                                    self.data["yahoo_finance"]["employees"] = spans[i+1].text.strip()
                         
-                        print("✅ Yahoo Finance basic data collected")
-            except Exception as html_error:
-                print(f"ℹ️ HTML parsing fallback failed: {html_error}")
+                        if self.data["yahoo_finance"]:
+                            print("✅ Yahoo Finance profile data collected via HTML")
+                except Exception as html_error:
+                    print(f"⚠️ HTML scraping failed: {html_error}")
             
-            # Try using yfinance as a last resort, with very limited scope
+            # STRATEGY 3: Fall back to alternative URL if needed
             if not self.data["yahoo_finance"]:
-                time.sleep(2)  # Additional delay
+                time.sleep(2)
                 try:
-                    ticker = yf.Ticker(self.symbol)
-                    # Just get price history - usually the most reliable endpoint
-                    history = ticker.history(period="1d")
-                    if not history.empty:
-                        latest = history.iloc[-1]
-                        self.data["yahoo_finance"]["currentPrice"] = float(latest["Close"])
-                        self.data["yahoo_finance"]["volume"] = int(latest["Volume"])
-                        print("✅ Yahoo Finance price data collected via yfinance")
-                except Exception as yf_error:
-                    print(f"⚠️ yfinance fallback failed: {yf_error}")
+                    print("🔄 Trying alternative Yahoo Finance URL...")
+                    url = f"https://finance.yahoo.com/quote/{self.symbol}/key-statistics" 
+                    response = requests.get(url, headers=custom_headers)
+                    
+                    if response.status_code == 200:
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        
+                        # Try to extract data from tables
+                        tables = soup.find_all('table')
+                        for table in tables:
+                            for row in table.find_all('tr'):
+                                cells = row.find_all('td')
+                                if len(cells) >= 2:
+                                    label = cells[0].text.strip()
+                                    value = cells[1].text.strip()
+                                    self.data["yahoo_finance"][label] = value
+                except Exception:
+                    pass
             
-            # If we still have no data, report an error
+            # FALLBACK: If nothing else worked, at least get basic info from Finviz
             if not self.data["yahoo_finance"]:
-                print("⚠️ Could not fetch any Yahoo Finance data")
+                print("⚠️ Using Finviz data as fallback for Yahoo Finance")
+                # Copy some basic data from Finviz
+                finviz_mapping = {
+                    "Price": "currentPrice",
+                    "Change": "priceChange", 
+                    "Market Cap": "marketCap",
+                    "P/E": "trailingPE",
+                    "Forward P/E": "forwardPE",
+                    "Beta": "beta",
+                    "Volume": "volume",
+                }
+                
+                for finviz_key, yahoo_key in finviz_mapping.items():
+                    if finviz_key in self.data["finviz"]:
+                        self.data["yahoo_finance"][yahoo_key] = self.data["finviz"][finviz_key]
+                
+                self.data["yahoo_finance"]["source"] = "Data from Finviz (Yahoo Finance unavailable)"
+            
+            # If still no data after all attempts
+            if not self.data["yahoo_finance"]:
+                print("⚠️ All Yahoo Finance data collection methods failed")
                 self.data["yahoo_finance"] = {"error": "Rate limited by Yahoo Finance"}
             
         except Exception as e:
