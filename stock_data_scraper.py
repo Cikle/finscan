@@ -716,8 +716,7 @@ class StockDataScraper:
                             <div class="stat-value" id="beta">-</div>
                         </div>
                     </div>
-                    
-                    <div class="metrics-grid">
+                      <div class="metrics-grid">
                         <!-- Performance Chart -->
                         <div>
                             <h3>Performance Metrics</h3>
@@ -734,6 +733,17 @@ class StockDataScraper:
                                     <canvas id="recommendationGauge"></canvas>
                                 </div>
                                 <div class="rating" id="recommendationRating">-</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Insider Trading Chart -->
+                        <div>
+                            <h3>Insider Trading by Quarter</h3>
+                            <div class="chart-container">
+                                <canvas id="insiderQuarterlyChart"></canvas>
+                                <div style="text-align: center; margin-top: 10px; font-size: 12px; color: #666;">
+                                    Q1: Jan-Mar | Q2: Apr-Jun | Q3: Jul-Sep | Q4: Oct-Dec
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1276,6 +1286,174 @@ class StockDataScraper:
                                     },
                                     legend: {
                                         display: false
+                                    }
+                                }
+                            }
+                        });                    }
+                    
+                    // Create the quarterly insider trading chart
+                    if (document.getElementById('insiderQuarterlyChart')) {
+                        // Find the OpenInsider section to extract data
+                        let insiderTrades = [];
+                        
+                        for (const section of sections) {
+                            const heading = section.querySelector('h2');
+                            if (heading && heading.textContent.includes('OpenInsider Data')) {
+                                const table = section.querySelector('table');
+                                if (table) {
+                                    // Find column indexes for trade date and trade type
+                                    const headerRow = table.querySelector('tr');
+                                    if (!headerRow) continue;
+                                    
+                                    const headers = headerRow.querySelectorAll('th');
+                                    let dateColIndex = -1;
+                                    let typeColIndex = -1;
+                                    
+                                    for (let i = 0; i < headers.length; i++) {
+                                        const header = headers[i].textContent.trim();
+                                        if (header === 'Trade Date' || header === 'Filing Date') {
+                                            dateColIndex = i;
+                                        }
+                                        if (header === 'Trade Type') {
+                                            typeColIndex = i;
+                                        }
+                                    }
+                                    
+                                    if (dateColIndex >= 0) {
+                                        // Process all rows
+                                        const rows = table.querySelectorAll('tr');
+                                        for (let i = 1; i < rows.length; i++) { // Skip header
+                                            const cells = rows[i].querySelectorAll('td');
+                                            if (cells.length > Math.max(dateColIndex, typeColIndex)) {
+                                                const dateStr = cells[dateColIndex].textContent.trim();
+                                                const date = new Date(dateStr);
+                                                
+                                                if (!isNaN(date.getTime())) {
+                                                    let isBuy = false;
+                                                    
+                                                    // Determine if buy or sell
+                                                    if (typeColIndex >= 0) {
+                                                        const typeStr = cells[typeColIndex].textContent.trim();
+                                                        isBuy = typeStr.includes('P - Purchase') || typeStr.startsWith('P ');
+                                                    }
+                                                    
+                                                    insiderTrades.push({
+                                                        date: date,
+                                                        isBuy: isBuy
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                          // Get the last 4 quarters
+                        const now = new Date();
+                        const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+                        const currentYear = now.getFullYear();
+                        
+                        // Create labels for the last 4 quarters
+                        const quarterLabels = [];
+                        const quarterlyData = {};
+                        
+                        for (let i = 0; i < 4; i++) {
+                            // Calculate quarter and year (going backward from current quarter)
+                            let quarter = currentQuarter - i;
+                            let year = currentYear;
+                            
+                            // Handle negative quarters by moving to previous year
+                            if (quarter <= 0) {
+                                quarter += 4;
+                                year -= 1;
+                            }
+                            
+                            // Create label with year for clarity
+                            const label = `Q${quarter} ${year}`;
+                            quarterLabels.unshift(label); // Add to front to maintain chronological order
+                            quarterlyData[label] = { buys: 0, sells: 0 };
+                        }
+                        
+                        // Process trades for the last 4 quarters
+                        for (const trade of insiderTrades) {
+                            const tradeYear = trade.date.getFullYear();
+                            const tradeQuarter = Math.floor(trade.date.getMonth() / 3) + 1;
+                            
+                            // Check if the trade falls within our 4-quarter window
+                            for (const label of quarterLabels) {
+                                const [q, y] = label.split(' ');
+                                const quarterNum = parseInt(q.substring(1));
+                                const year = parseInt(y);
+                                
+                                if (tradeYear === year && tradeQuarter === quarterNum) {
+                                    if (trade.isBuy) {
+                                        quarterlyData[label].buys++;
+                                    } else {
+                                        quarterlyData[label].sells++;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                          // Prepare data for chart
+                        const labels = quarterLabels; // Use our ordered labels
+                        const buyData = labels.map(q => quarterlyData[q].buys);
+                        const sellData = labels.map(q => quarterlyData[q].sells);
+                        
+                        // Create the quarterly chart
+                        const ctx = document.getElementById('insiderQuarterlyChart').getContext('2d');
+                        new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [
+                                    {
+                                        label: 'Buys',
+                                        data: buyData,
+                                        backgroundColor: 'rgba(76, 175, 80, 0.7)',
+                                        borderColor: 'rgba(76, 175, 80, 1)',
+                                        borderWidth: 1
+                                    },
+                                    {
+                                        label: 'Sells',
+                                        data: sellData,
+                                        backgroundColor: 'rgba(244, 67, 54, 0.7)',
+                                        borderColor: 'rgba(244, 67, 54, 1)',
+                                        borderWidth: 1
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        title: {
+                                            display: true,
+                                            text: 'Number of Transactions'
+                                        },
+                                        ticks: {
+                                            stepSize: 1
+                                        }
+                                    }
+                                },
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: 'Insider Activity - Last 4 Quarters'
+                                    },                                    tooltip: {
+                                        callbacks: {
+                                            title: function(tooltipItems) {
+                                                return tooltipItems[0].label; // Label already includes year
+                                            },
+                                            label: function(context) {
+                                                const value = context.raw;
+                                                const label = context.dataset.label;
+                                                return `${label}: ${value} transactions`;
+                                            }
+                                        }
                                     }
                                 }
                             }
