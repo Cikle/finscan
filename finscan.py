@@ -420,18 +420,44 @@ class StockDataProcessor:
                         key = cells[0].text.strip()
                         value = cells[1].text.strip()
                         metrics[key] = value
-            
-            # Format specific fields
+              # Format specific fields and organize into categories
             key_metrics = {
+                # Basic info
                 'symbol': metrics.get('symbol', ''),
                 'longName': metrics.get('longName', ''),
+                
+                # Price data
                 'Price': metrics.get('Price', ''),
                 'Change': metrics.get('Change', ''),
                 'Market Cap': metrics.get('Market Cap', ''),
                 'P/E': metrics.get('P/E', ''),
                 'Volume': metrics.get('Volume', ''),
-                'Recom': metrics.get('Recom', '')
+                'Recom': metrics.get('Recom', ''),
+                
+                # Categories for organization
+                'valuation_metrics': {},
+                'financial_metrics': {},
+                'technical_metrics': {},
+                'growth_metrics': {}
             }
+            
+            # Organize metrics into categories
+            for key, value in metrics.items():
+                # Valuation metrics
+                if key in ['P/E', 'P/S', 'P/B', 'P/FCF', 'EPS', 'Dividend', 'Dividend %', 'PEG', 'EV/EBITDA']:
+                    key_metrics['valuation_metrics'][key] = value
+                
+                # Financial metrics
+                elif key in ['ROA', 'ROE', 'ROI', 'Gross Margin', 'Oper. Margin', 'Profit Margin', 'Earnings', 'Payout', 'Debt/Eq', 'Current Ratio']:
+                    key_metrics['financial_metrics'][key] = value
+                
+                # Technical metrics
+                elif key in ['RSI', 'Rel Volume', 'Beta', 'ATR', 'Volatility', '52W High', '52W Low', 'SMA20', 'SMA50', 'SMA200']:
+                    key_metrics['technical_metrics'][key] = value
+                
+                # Growth metrics
+                elif 'Growth' in key or key in ['EPS next Y', 'EPS next Q', 'Sales Q/Q', 'EPS Q/Q']:
+                    key_metrics['growth_metrics'][key] = value
             
             # Calculate buy/sell ratio based on OpenInsider data
             insider_section = soup.find('div', class_='section')
@@ -796,15 +822,83 @@ class FinScanQt(QMainWindow):
                     if company_name:
                         header_text += f" - {company_name}"
                     self.symbol_header.setText(header_text)
+                      # Format metrics for display with collapsible sections
+                    formatted_metrics = f"""
+                    <style>
+                        .collapsible {{
+                            background-color: #f1f1f1;
+                            color: #444;
+                            cursor: pointer;
+                            padding: 10px;
+                            width: 100%;
+                            border: none;
+                            text-align: left;
+                            outline: none;
+                            font-size: 15px;
+                            margin-top: 10px;
+                            border-radius: 4px;
+                        }}
+                        .active, .collapsible:hover {{
+                            background-color: #ddd;
+                        }}
+                        .content {{
+                            padding: 0 10px;
+                            max-height: 0;
+                            overflow: hidden;
+                            transition: max-height 0.2s ease-out;
+                            background-color: #f9f9f9;
+                            border-radius: 0 0 4px 4px;
+                        }}
+                        .expanded {{
+                            max-height: 1000px !important;
+                            padding: 10px;
+                            border: 1px solid #ddd;
+                        }}
+                        table {{
+                            width: 100%;
+                            border-collapse: collapse;
+                        }}
+                        td, th {{
+                            padding: 4px;
+                        }}
+                        .key-metrics {{
+                            background-color: #e8f4f8;
+                            padding: 10px;
+                            border-radius: 4px;
+                            margin-bottom: 15px;
+                        }}
+                        .section-heading {{
+                            font-weight: bold;
+                            color: #2962ff;
+                            margin-top: 15px;
+                            margin-bottom: 5px;
+                        }}
+                    </style>
+                    <script>
+                        function toggleCollapsible(id) {{
+                            var content = document.getElementById(id);
+                            content.classList.toggle("expanded");
+                            
+                            var btn = document.querySelector('button[data-target="' + id + '"]');
+                            if (content.classList.contains("expanded")) {{
+                                btn.innerHTML = btn.innerHTML.replace("▼", "▲");
+                            }} else {{
+                                btn.innerHTML = btn.innerHTML.replace("▲", "▼");
+                            }}
+                        }}
+                    </script>
+                    """
                     
-                    # Format metrics for display
-                    formatted_metrics = f"<h2>{file_info['symbol']} Key Metrics</h2>"
+                    # Header with symbol and company name
                     if company_name:
-                        formatted_metrics = f"<h2>{file_info['symbol']} - {company_name}</h2>"
+                        formatted_metrics += f"<h2>{file_info['symbol']} - {company_name}</h2>"
+                    else:
+                        formatted_metrics += f"<h2>{file_info['symbol']} Key Metrics</h2>"
                     
                     formatted_metrics += f"<p><b>Report Date:</b> {file_info['date']}</p>"
                     
-                    formatted_metrics += "<h3>Market Data</h3>"
+                    # Key market data - always visible
+                    formatted_metrics += "<div class='key-metrics'>"
                     formatted_metrics += "<table border='0' style='width:100%'>"
                     
                     if 'Price' in metrics:
@@ -819,12 +913,107 @@ class FinScanQt(QMainWindow):
                         formatted_metrics += f"<tr><td><b>Volume:</b></td><td>{metrics['Volume']}</td>"
                         formatted_metrics += f"<td><b>Analyst Rating:</b></td><td>{metrics.get('Recom', 'N/A')}</td></tr>"
                     
-                    formatted_metrics += "</table>"
+                    formatted_metrics += "</table></div>"
+                      # Add collapsible sections for additional data
                     
-                    # Insider data
-                    if 'Buy Count' in metrics:
-                        formatted_metrics += "<h3>Insider Trading</h3>"
-                        formatted_metrics += f"<p>Buy Count: {metrics['Buy Count']} | Sell Count: {metrics['Sell Count']}</p>"
+                    # Valuation metrics section
+                    if metrics.get('valuation_metrics') and len(metrics['valuation_metrics']) > 0:
+                        formatted_metrics += "<button class='collapsible' data-target='valuation-metrics' onclick='toggleCollapsible(\"valuation-metrics\")'>Valuation Metrics ▼</button>"
+                        formatted_metrics += "<div id='valuation-metrics' class='content'>"
+                        formatted_metrics += "<table border='0' style='width:100%'>"
+                        
+                        # Display valuation metrics in rows of 2 columns
+                        items = list(metrics['valuation_metrics'].items())
+                        for i in range(0, len(items), 2):
+                            formatted_metrics += "<tr>"
+                            k1, v1 = items[i]
+                            formatted_metrics += f"<td><b>{k1}:</b></td><td>{v1}</td>"
+                            
+                            # Add second column if available
+                            if i + 1 < len(items):
+                                k2, v2 = items[i + 1]
+                                formatted_metrics += f"<td><b>{k2}:</b></td><td>{v2}</td>"
+                            
+                            formatted_metrics += "</tr>"
+                            
+                        formatted_metrics += "</table>"
+                        formatted_metrics += "</div>"
+                    
+                    # Financial metrics section
+                    if metrics.get('financial_metrics') and len(metrics['financial_metrics']) > 0:
+                        formatted_metrics += "<button class='collapsible' data-target='financial-metrics' onclick='toggleCollapsible(\"financial-metrics\")'>Financial Metrics ▼</button>"
+                        formatted_metrics += "<div id='financial-metrics' class='content'>"
+                        formatted_metrics += "<table border='0' style='width:100%'>"
+                        
+                        # Display financial metrics in rows of 2 columns
+                        items = list(metrics['financial_metrics'].items())
+                        for i in range(0, len(items), 2):
+                            formatted_metrics += "<tr>"
+                            k1, v1 = items[i]
+                            formatted_metrics += f"<td><b>{k1}:</b></td><td>{v1}</td>"
+                            
+                            # Add second column if available
+                            if i + 1 < len(items):
+                                k2, v2 = items[i + 1]
+                                formatted_metrics += f"<td><b>{k2}:</b></td><td>{v2}</td>"
+                            
+                            formatted_metrics += "</tr>"
+                            
+                        formatted_metrics += "</table>"
+                        formatted_metrics += "</div>"
+                    
+                    # Technical metrics section
+                    if metrics.get('technical_metrics') and len(metrics['technical_metrics']) > 0:
+                        formatted_metrics += "<button class='collapsible' data-target='technical-metrics' onclick='toggleCollapsible(\"technical-metrics\")'>Technical Metrics ▼</button>"
+                        formatted_metrics += "<div id='technical-metrics' class='content'>"
+                        formatted_metrics += "<table border='0' style='width:100%'>"
+                        
+                        # Display technical metrics in rows of 2 columns
+                        items = list(metrics['technical_metrics'].items())
+                        for i in range(0, len(items), 2):
+                            formatted_metrics += "<tr>"
+                            k1, v1 = items[i]
+                            formatted_metrics += f"<td><b>{k1}:</b></td><td>{v1}</td>"
+                            
+                            # Add second column if available
+                            if i + 1 < len(items):
+                                k2, v2 = items[i + 1]
+                                formatted_metrics += f"<td><b>{k2}:</b></td><td>{v2}</td>"
+                            
+                            formatted_metrics += "</tr>"
+                            
+                        formatted_metrics += "</table>"
+                        formatted_metrics += "</div>"
+                    
+                    # Growth metrics section
+                    if metrics.get('growth_metrics') and len(metrics['growth_metrics']) > 0:
+                        formatted_metrics += "<button class='collapsible' data-target='growth-metrics' onclick='toggleCollapsible(\"growth-metrics\")'>Growth Metrics ▼</button>"
+                        formatted_metrics += "<div id='growth-metrics' class='content'>"
+                        formatted_metrics += "<table border='0' style='width:100%'>"
+                        
+                        # Display growth metrics in rows of 2 columns
+                        items = list(metrics['growth_metrics'].items())
+                        for i in range(0, len(items), 2):
+                            formatted_metrics += "<tr>"
+                            k1, v1 = items[i]
+                            formatted_metrics += f"<td><b>{k1}:</b></td><td>{v1}</td>"
+                            
+                            # Add second column if available
+                            if i + 1 < len(items):
+                                k2, v2 = items[i + 1]
+                                formatted_metrics += f"<td><b>{k2}:</b></td><td>{v2}</td>"
+                            
+                            formatted_metrics += "</tr>"
+                            
+                        formatted_metrics += "</table>"
+                        formatted_metrics += "</div>"
+                    
+                    # Insider data section
+                    if 'Buy Count' in metrics and 'Sell Count' in metrics:
+                        formatted_metrics += "<button class='collapsible' data-target='insider-data' onclick='toggleCollapsible(\"insider-data\")'>Insider Trading Data ▼</button>"
+                        formatted_metrics += "<div id='insider-data' class='content'>"
+                        formatted_metrics += f"<p><b>Buy Count:</b> {metrics['Buy Count']} | <b>Sell Count:</b> {metrics['Sell Count']}</p>"
+                        formatted_metrics += "</div>"
                     
                     self.metrics_display.setHtml(formatted_metrics)
                     
