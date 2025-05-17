@@ -161,8 +161,8 @@ class TradingViewWidget(QWebEngineView):
             os.makedirs(cache_dir, exist_ok=True)
         profile.setCachePath(cache_dir)
         profile.setPersistentStoragePath(cache_dir)
-        
-    def load_chart(self, symbol):
+          
+    def load_chart(self, symbol, company_name=""):
         """Load TradingView chart for the given symbol"""
         # Extract just the symbol part without exchange
         symbol_only = symbol.split(':')[-1] if ':' in symbol else symbol
@@ -202,6 +202,11 @@ class TradingViewWidget(QWebEngineView):
                     font-size: 24px;
                     margin-bottom: 20px;
                     font-weight: bold;
+                }
+                .company-name {
+                    font-size: 16px;
+                    margin-bottom: 15px;
+                    color: #cccccc;
                 }
                 .chart-image {
                     width: 95%;
@@ -243,6 +248,7 @@ class TradingViewWidget(QWebEngineView):
         <body>
             <div class="chart-container">
                 <div class="symbol">REPLACE_SYMBOL</div>
+                <div class="company-name">COMPANY_NAME</div>
                 <!-- Use direct img tag instead of background-image for better reliability -->
                 <img class="chart-image" src="https://charts2.finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l" alt="SYMBOL_ONLY Chart" onerror="this.onerror=null; this.src='https://finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l';">
                 <div class="note">Chart data from Finviz</div>
@@ -278,6 +284,13 @@ class TradingViewWidget(QWebEngineView):
         # Replace the symbol placeholder
         html = html.replace("REPLACE_SYMBOL", symbol)
         html = html.replace("SYMBOL_ONLY", symbol_only)
+        
+        # Replace company name or hide the element if not provided
+        if company_name:
+            html = html.replace("COMPANY_NAME", company_name)
+        else:
+            # If no company name, replace with empty div
+            html = html.replace('<div class="company-name">COMPANY_NAME</div>', '')
         
         # Apply the HTML
         self.setHtml(html)
@@ -382,6 +395,21 @@ class StockDataProcessor:
             if symbol_match:
                 metrics['symbol'] = symbol_match.group(1)
             
+            # Extract company name
+            company_name = ""
+            h1_tags = soup.find_all('h1')
+            for h1 in h1_tags:
+                if metrics.get('symbol', '') in h1.text:
+                    company_name = h1.text.strip()
+                    # Remove the symbol from the company name
+                    if metrics.get('symbol', '') in company_name:
+                        company_name = company_name.replace(metrics.get('symbol', ''), '').strip()
+                        # Remove any remaining parentheses
+                        company_name = re.sub(r'[\(\)]', '', company_name).strip()
+                    
+                    metrics['longName'] = company_name
+                    break
+            
             # Get key metrics from table
             tables = soup.find_all('table')
             for table in tables:
@@ -395,6 +423,8 @@ class StockDataProcessor:
             
             # Format specific fields
             key_metrics = {
+                'symbol': metrics.get('symbol', ''),
+                'longName': metrics.get('longName', ''),
                 'Price': metrics.get('Price', ''),
                 'Change': metrics.get('Change', ''),
                 'Market Cap': metrics.get('Market Cap', ''),
@@ -721,12 +751,13 @@ class FinScanQt(QMainWindow):
             
             if file_info['temp']:
                 status_item.setForeground(QColor(255, 140, 0))  # Orange for temporary
-            else:                status_item.setForeground(QColor(0, 128, 0))  # Green for saved
+            else:
+                status_item.setForeground(QColor(0, 128, 0))  # Green for saved
                 
             self.files_table.setItem(row, 0, symbol_item)
             self.files_table.setItem(row, 1, date_item)
             self.files_table.setItem(row, 2, status_item)
-            
+    
     def on_file_selected(self):
         """Handle file selection in the list"""
         selected_items = self.files_table.selectedItems()
@@ -748,15 +779,17 @@ class FinScanQt(QMainWindow):
                 if content:
                     metrics = StockDataProcessor.extract_metrics_from_html(content)
                     
-                    # Extract company name from the content (if available)
-                    company_name = ""
-                    company_match = re.search(r'<h1[^>]*>([^<]+)</h1>', content)
-                    if company_match:
-                        company_name = company_match.group(1).strip()
-                        if file_info['symbol'] in company_name:
-                            company_name = company_name.replace(file_info['symbol'], '').strip()
-                            # Remove any remaining parentheses
-                            company_name = re.sub(r'[\(\)]', '', company_name).strip()
+                    # Get company name from metrics
+                    company_name = metrics.get('longName', '')
+                    if not company_name:
+                        # Fallback: Extract company name from the content if not in metrics
+                        company_match = re.search(r'<h1[^>]*>([^<]+)</h1>', content)
+                        if company_match:
+                            company_name = company_match.group(1).strip()
+                            if file_info['symbol'] in company_name:
+                                company_name = company_name.replace(file_info['symbol'], '').strip()
+                                # Remove any remaining parentheses
+                                company_name = re.sub(r'[\(\)]', '', company_name).strip()
                     
                     # Update the symbol header
                     header_text = f"{file_info['symbol']}"
@@ -795,11 +828,21 @@ class FinScanQt(QMainWindow):
                     
                     self.metrics_display.setHtml(formatted_metrics)
                     
-                    # Update chart with the symbol
-                    self.tradingview_widget.load_chart(f"NASDAQ:{file_info['symbol']}")
+                    # Update chart with the symbol and company name (if available)
+                    if self.tradingview_widget.load_chart.__code__.co_argcount > 2:  # Check if method accepts company_name parameter
+                        self.tradingview_widget.load_chart(f"NASDAQ:{file_info['symbol']}", company_name)
+                    else:
+                        # Fallback for older version without company_name support
+                        self.tradingview_widget.load_chart(f"NASDAQ:{file_info['symbol']}")
                     
                     # Load the full HTML report in the report tab
                     self.report_view.load(QUrl.fromLocalFile(file_info['path']))
+                    
+                    # Update the report tab title to include the company name
+                    report_tab_title = "Full Report"
+                    if company_name:
+                        report_tab_title = f"Full Report - {file_info['symbol']} ({company_name})"
+                    self.tab_widget.setTabText(1, report_tab_title)
                     
                     # Switch to the combined tab
                     self.tab_widget.setCurrentIndex(0)
@@ -809,6 +852,8 @@ class FinScanQt(QMainWindow):
             self.delete_btn.setEnabled(False)
             self.current_file = None
             self.symbol_header.setText("")
+            # Reset tab title
+            self.tab_widget.setTabText(1, "Full Report")
     
     def on_file_double_clicked(self, row, column):
         """Handle double-click on file in the list"""
