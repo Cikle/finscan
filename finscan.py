@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QTableWidget, QTableWidgetItem, QSplitter, QTabWidget, 
                             QProgressBar, QTextEdit, QMessageBox, QHeaderView, 
                             QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox)
+from PyQt5.QtCore import QSettings
 from PyQt5.QtCore import Qt, QUrl, pyqtSlot, QSize, QThread, pyqtSignal, QTimer
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtGui import QIcon, QFont, QColor, QPalette
@@ -179,8 +180,16 @@ class TradingViewWidget(QWebEngineView):
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Stock Chart</title>
-            <style>
+            <title>Stock Chart</title>        <style>                :root {
+                    --bg-color: #f8f4f4;
+                    --text-color: #333333;
+                    --secondary-text-color: #555555;
+                    --note-color: #999;
+                    --button-bg: #2962ff;
+                    --button-hover-bg: #1E52E0;
+                    --shadow-color: rgba(0,0,0,0.2);
+                }
+                
                 body, html { 
                     margin: 0; 
                     padding: 0; 
@@ -190,8 +199,8 @@ class TradingViewWidget(QWebEngineView):
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    background-color: #1e1e1e;
-                    color: white;
+                    background-color: var(--bg-color);
+                    color: var(--text-color);
                     font-family: Arial, sans-serif;
                 }
                 .chart-container {
@@ -211,27 +220,25 @@ class TradingViewWidget(QWebEngineView):
                 .company-name {
                     font-size: 16px;
                     margin-bottom: 15px;
-                    color: #cccccc;
+                    color: var(--secondary-text-color);
                 }
                 .chart-image {
                     width: 95%;
                     max-width: 1200px;
                     border-radius: 8px;
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-                }
-                .chart-image:hover {
-                    transform: scale(1.01);
-                    transition: transform 0.3s ease;
+                    box-shadow: 0 4px 8px var(--shadow-color);
                 }
                 .note {
                     margin-top: 10px;
-                    color: #999;
+                    color: var(--note-color);
                     font-size: 12px;
-                }
+                }                
                 .button {
                     margin-top: 15px;
-                    padding: 8px 16px;
-                    background-color: #2962ff;
+                    margin-right: 12px;
+                    margin-left: 12px;
+                    padding: 10px 20px;
+                    background-color: var(--button-bg);
                     color: white;
                     border: none;
                     border-radius: 4px;
@@ -239,14 +246,34 @@ class TradingViewWidget(QWebEngineView):
                     text-decoration: none;
                     font-weight: bold;
                     transition: background-color 0.2s;
+                    display: inline-block;
                 }
                 .button:hover {
-                    background-color: #1E52E0;
+                    background-color: var(--button-hover-bg);
                 }
                 .buttons-container {
-                    margin-top: 10px;
+                    margin-top: 20px;
+                    margin-bottom: 15px;
                     display: flex;
-                    gap: 10px;
+                    gap: 20px;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                }
+                .theme-toggle {
+                    margin-top: 20px;
+                }
+                #theme-button {
+                    padding: 6px 12px;
+                    background-color: #555;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    transition: background-color 0.2s;
+                }
+                #theme-button:hover {
+                    background-color: #666;
                 }
             </style>
         </head>
@@ -256,16 +283,15 @@ class TradingViewWidget(QWebEngineView):
                 <div class="company-name">COMPANY_NAME</div>
                 <!-- Use direct img tag instead of background-image for better reliability -->
                 <img class="chart-image" src="https://charts2.finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l" alt="SYMBOL_ONLY Chart" onerror="this.onerror=null; this.src='https://finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l';">
-                <div class="note">Chart data from Finviz</div>
-                <div class="buttons-container">
-                    <a class="button" href="https://www.tradingview.com/chart/?symbol=REPLACE_SYMBOL" target="_blank">Open in TradingView</a>
-                    <a class="button" href="https://finviz.com/quote.ashx?t=SYMBOL_ONLY" target="_blank">View on Finviz</a>
+                <div class="note">Chart data from Finviz</div>                <div class="buttons-container">
+                    <a class="button" href="javascript:void(0);" onclick="window.open('https://finviz.com/quote.ashx?t=SYMBOL_ONLY', '_blank')">View on Finviz</a>
+                    <a class="button" href="javascript:void(0);" onclick="window.open('http://openinsider.com/screener?s=SYMBOL_ONLY', '_blank')">View on OpenInsider</a>
+                    <a class="button" href="javascript:void(0);" onclick="window.open('https://finance.yahoo.com/quote/SYMBOL_ONLY', '_blank')">View on Yahoo Finance</a>
                 </div>
             </div>
-            
-            <!-- Script to handle image loading errors -->
-            <script>
+              <!-- Script to handle image loading errors -->            <script>
                 document.addEventListener('DOMContentLoaded', function() {
+                    // Handle image loading errors
                     const img = document.querySelector('.chart-image');
                     img.onerror = function() {
                         // Try alternative source if the first one fails
@@ -542,6 +568,7 @@ class StockDataProcessor:
 
 class FinScanQt(QMainWindow):
     """Main application window"""
+    
     def __init__(self):
         super().__init__()
         self.file_manager = FileManager()
@@ -550,8 +577,11 @@ class FinScanQt(QMainWindow):
         self.init_ui()
         self.populate_file_list()
         
+        # Apply styling
+        self.apply_style()
+        
         # Show default chart
-        self.tradingview_widget.load_chart("NASDAQ:AAPL")
+        self.tradingview_widget.load_chart("NASDAQ:NVDA")
     
     def closeEvent(self, event):
         """Handle application close event - clean up temp files"""
@@ -621,6 +651,7 @@ class FinScanQt(QMainWindow):
             example_btn.setFixedWidth(50)
             example_btn.clicked.connect(lambda checked, s=symbol: self.load_example(s))
             examples_layout.addWidget(example_btn)
+          # Theme toggle button removed - using only light mode
         
         examples_layout.addStretch(1)
         search_layout.addLayout(examples_layout)
@@ -755,7 +786,6 @@ class FinScanQt(QMainWindow):
         
         # Set initial split ratio (30% left, 70% right)
         splitter.setSizes([400, 800])
-        
         main_layout.addWidget(splitter)
         self.setCentralWidget(main_widget)
 
@@ -764,72 +794,127 @@ class FinScanQt(QMainWindow):
         
     def apply_style(self):
         """Apply styling to the application"""
-        # Modern style sheet
-        style = """
-        QMainWindow {
-            background-color: #f5f5f5;
+        # Define colors
+        colors = {
+            "bg": "#f5f5f5",
+            "text": "#333333",
+            "accent": "#4a86e8",
+            "accent_hover": "#3a76d8",
+            "border": "#cccccc",
+            "disabled": "#cccccc",
+            "alt_bg": "#f9f9f9",
+            "header_bg": "#e0e0e0", 
+            "tab_bg": "#e0e0e0",
+            "tab_selected": "white"
         }
-        QGroupBox {
+        
+        # Modern style sheet with dynamic colors
+        style = f"""
+        QMainWindow, QDialog {{
+            background-color: {colors["bg"]};
+            color: {colors["text"]};
+        }}
+        QWidget {{
+            color: {colors["text"]};
+        }}
+        QGroupBox {{
             font-weight: bold;
-            border: 1px solid #cccccc;
+            border: 1px solid {colors["border"]};
             border-radius: 5px;
             margin-top: 10px;
             padding-top: 10px;
-        }
-        QGroupBox::title {
+            color: {colors["text"]};
+        }}
+        QGroupBox::title {{
             subcontrol-origin: margin;
             left: 10px;
             padding: 0 5px;
-        }
-        QPushButton {
-            background-color: #4a86e8;
+        }}
+        QPushButton {{
+            background-color: {colors["accent"]};
             color: white;
             border: none;
             border-radius: 3px;
             padding: 5px 10px;
-        }
-        QPushButton:hover {
-            background-color: #3a76d8;
-        }
-        QPushButton:disabled {
-            background-color: #cccccc;
-        }
-        QLineEdit {
-            border: 1px solid #cccccc;
+        }}
+        QPushButton:hover {{
+            background-color: {colors["accent_hover"]};
+        }}
+        QPushButton:disabled {{
+            background-color: {colors["disabled"]};
+        }}
+        QPushButton#themeToggleBtn {{
+            background-color: {colors["header_bg"]};
+            padding: 5px;
+        }}
+        QPushButton#themeToggleBtn:hover {{
+            background-color: {colors["accent"]};
+        }}
+        QLineEdit {{
+            border: 1px solid {colors["border"]};
             border-radius: 3px;
             padding: 5px;
-        }
-        QTableWidget {
-            border: 1px solid #cccccc;
+            background-color: {colors["bg"]};
+            color: {colors["text"]};
+        }}
+        QTableWidget {{
+            border: 1px solid {colors["border"]};
             border-radius: 3px;
-            alternate-background-color: #f9f9f9;
-            gridline-color: #e0e0e0;
-        }
-        QTableWidget::item:selected {
-            background-color: #4a86e8;
+            alternate-background-color: {colors["alt_bg"]};
+            gridline-color: {colors["border"]};
+            background-color: {colors["bg"]};
+            color: {colors["text"]};
+        }}
+        QTableWidget::item:selected {{
+            background-color: {colors["accent"]};
             color: white;
-        }
-        QHeaderView::section {
-            background-color: #e0e0e0;
+        }}
+        QHeaderView::section {{
+            background-color: {colors["header_bg"]};
             border: none;
             padding: 5px;
-        }
-        QTabWidget::pane {
-            border: 1px solid #cccccc;
+            color: {colors["text"]};
+        }}
+        QTabWidget::pane {{
+            border: 1px solid {colors["border"]};
             border-radius: 3px;
-        }
-        QTabBar::tab {
-            background-color: #e0e0e0;
-            border: 1px solid #cccccc;
+        }}
+        QTabBar::tab {{
+            background-color: {colors["tab_bg"]};
+            border: 1px solid {colors["border"]};
             border-bottom: none;
             border-top-left-radius: 3px;
             border-top-right-radius: 3px;
             padding: 5px 10px;
             margin-right: 2px;
-        }
-        QTabBar::tab:selected {
-            background-color: white;
-        }
+            color: {colors["text"]};
+        }}
+        QTabBar::tab:selected {{
+            background-color: {colors["tab_selected"]};
+        }}
+        QTextEdit {{
+            background-color: {colors["bg"]};
+            color: {colors["text"]};
+            border: 1px solid {colors["border"]};
+        }}
+        QLabel {{
+            color: {colors["text"]};
+        }}
+        QComboBox {{
+            border: 1px solid {colors["border"]};
+            border-radius: 3px;
+            padding: 5px;
+            background-color: {colors["bg"]};
+            color: {colors["text"]};
+        }}
+        QProgressBar {{
+            border: 1px solid {colors["border"]};
+            border-radius: 3px;
+            text-align: center;
+        }}
+        QProgressBar::chunk {{
+            background-color: {colors["accent"]};
+        }}
         """
         self.setStyleSheet(style)
         
@@ -1184,7 +1269,6 @@ class FinScanQt(QMainWindow):
         """Update console output with new text"""
         self.console_output.append(text)
         self.console_output.ensureCursorVisible()    
-    
     def on_stock_data_ready(self, success, error, symbol, filename):
         """Handle completion of stock data generation"""
         self.progress_bar.hide()
@@ -1207,7 +1291,7 @@ class FinScanQt(QMainWindow):
                 QMessageBox.critical(self, "Symbol Not Found", f"Symbol {symbol} could not be found in our data sources.")
             else:
                 self.status_label.setText(f"Error collecting data for {symbol}!")
-                QMessageBox.critical(self, "Error", f"Failed to generate data: {error}")
+                QMessageBox.critical(self, "Error", f"Failed to generate data: {error}")    # Toggle theme method removed - always using light mode
 
 
 def main():
@@ -1215,7 +1299,10 @@ def main():
     os.environ['PYTHONIOENCODING'] = 'utf-8'
     
     app = QApplication(sys.argv)
+    
+    # Create and show the window
     window = FinScanQt()
+    
     window.show()
     sys.exit(app.exec_())
 

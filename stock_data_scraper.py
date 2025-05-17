@@ -652,7 +652,7 @@ class StockDataScraper:
             <h1>{self.symbol} Financial Data</h1>
             <p>Data collected on {self.data['timestamp']}</p>
             
-            <button class="copy-btn" onclick="copyAllData()">Copy All Data for AI Trading</button>
+            <button class="copy-btn" onclick="copyAllData()">Copy All Data</button>
             <textarea id="copyArea" class="hidden"></textarea>
             
             <div class="section">
