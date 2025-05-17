@@ -1007,10 +1007,9 @@ class StockDataScraper:
             html_content += f"""Buy Count: {self.data["openinsider"]["buy_count"]}\\n"""
             html_content += f"""Sell Count: {self.data["openinsider"]["sell_count"]}\\n"""
             html_content += f"""Buy/Sell Ratio: {self.data["openinsider"]["buy_sell_ratio"]}\\n\\n"""
-        
         if "insider_trades" in self.data["openinsider"] and self.data["openinsider"]["insider_trades"]:
             html_content += "Recent Insider Trades:\\n"
-            for i, trade in enumerate(self.data["openinsider"]["insider_trades"][:5]):
+            for i, trade in enumerate(self.data["openinsider"]["insider_trades"]):
                 # Create a trade summary string with all available data
                 trade_info = " - ".join([f"{k}: {v}" for k, v in trade.items() 
                                       if k in ["Filing Date", "Trade Date", "Insider Name", "Title", 

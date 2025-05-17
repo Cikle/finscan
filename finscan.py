@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QTableWidget, QTableWidgetItem, QSplitter, QTabWidget, 
                             QProgressBar, QTextEdit, QMessageBox, QHeaderView, 
                             QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox)
-from PyQt5.QtCore import Qt, QUrl, pyqtSlot, QSize, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QUrl, pyqtSlot, QSize, QThread, pyqtSignal, QTimer
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtGui import QIcon, QFont, QColor, QPalette
 
@@ -47,12 +47,11 @@ class StockDataThread(QThread):
             
             # Generate a unique filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{self.symbol}_data_{timestamp}.html"
-              # Generate path in temp_data directory inside the application folder
-            temp_dir = os.path.join(os.getcwd(), "temp_data")
-            if not os.path.exists(temp_dir):
-                os.makedirs(temp_dir, exist_ok=True)
-            full_path = os.path.join(temp_dir, filename)
+            filename = f"{self.symbol}_data_{timestamp}.html"              # Use the FileManager's temp directory path
+            file_manager = FileManager()
+            if not os.path.exists(file_manager.temp_dir):
+                os.makedirs(file_manager.temp_dir, exist_ok=True)
+            full_path = os.path.join(file_manager.temp_dir, filename)
             
             # Safe output function to handle Unicode characters
             def safe_print(text):
@@ -307,17 +306,23 @@ class FileManager:
     def __init__(self):
         self.base_dir = os.getcwd()
         
-        # Use a temp_data folder in the current directory instead of user's home
+        # Use a temp_data folder for temporary storage
         self.temp_dir = os.path.join(self.base_dir, "temp_data")
         
-        # Create temp directory if it doesn't exist
+        # Use a saved_data folder for permanent storage
+        self.saved_dir = os.path.join(self.base_dir, "saved_data")
+        
+        # Create directories if they don't exist
         if not os.path.exists(self.temp_dir):
             os.makedirs(self.temp_dir)
+            
+        if not os.path.exists(self.saved_dir):
+            os.makedirs(self.saved_dir)
     
     def get_files(self, pattern="*_data_*.html"):
         """Get list of report files"""
         temp_files = glob.glob(os.path.join(self.temp_dir, pattern))
-        saved_files = glob.glob(os.path.join(self.base_dir, pattern))
+        saved_files = glob.glob(os.path.join(self.saved_dir, pattern))
         
         all_files = []
         
@@ -340,10 +345,6 @@ class FileManager:
         
         # Process saved files
         for file_path in saved_files:
-            # Skip files in the temp directory
-            if os.path.dirname(file_path) == self.temp_dir:
-                continue
-                
             file_name = os.path.basename(file_path)
             match = re.search(r'([A-Z]+)_data_(\d+_\d+)', file_name)
             if match:
@@ -368,7 +369,7 @@ class FileManager:
         
         Args:
             temp_path: Path to the temporary file
-            target_dir: Optional target directory. If None, use the default location
+            target_dir: Optional target directory. If None, use the saved_data directory
         """
         if os.path.exists(temp_path):
             # Make sure this is a path in the temp directory
@@ -378,11 +379,11 @@ class FileManager:
             if norm_temp_dir == norm_path_dir:
                 filename = os.path.basename(temp_path)
                 
-                # Use specified target directory or default to base_dir
+                # Use specified target directory or default to saved_dir
                 if target_dir and os.path.isdir(target_dir):
                     new_path = os.path.join(target_dir, filename)
                 else:
-                    new_path = os.path.join(self.base_dir, filename)
+                    new_path = os.path.join(self.saved_dir, filename)
                 
                 print(f"Moving {temp_path} to {new_path}")
                 
@@ -1116,7 +1117,6 @@ class FinScanQt(QMainWindow):
     def on_file_double_clicked(self, row, column):
         """Handle double-click on file in the list"""
         self.on_view_clicked()
-    
     def on_view_clicked(self):
         """View selected report in browser"""
         if self.current_file and os.path.exists(self.current_file['path']):
@@ -1127,7 +1127,12 @@ class FinScanQt(QMainWindow):
         if self.current_file and self.current_file['temp']:
             new_path = self.file_manager.save_file(self.current_file['path'])
             if new_path:
-                QMessageBox.information(self, "Success", f"Report saved as {os.path.basename(new_path)}")
+                # Show temporary status message instead of modal dialog
+                self.status_label.setText(f"Report saved to saved_data folder as {os.path.basename(new_path)}")
+                
+                # Auto-clear the message after 3 seconds
+                QTimer.singleShot(3000, lambda: self.status_label.setText("Ready to collect stock data..."))
+                
                 self.populate_file_list()
     
     def on_delete_clicked(self):
