@@ -48,6 +48,11 @@ class StockDataThread(QThread):
             # Generate a unique filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{self.symbol}_data_{timestamp}.html"
+              # Generate path in temp_data directory inside the application folder
+            temp_dir = os.path.join(os.getcwd(), "temp_data")
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir, exist_ok=True)
+            full_path = os.path.join(temp_dir, filename)
             
             # Safe output function to handle Unicode characters
             def safe_print(text):
@@ -78,24 +83,25 @@ class StockDataThread(QThread):
                     safe_print(f"Collecting data for {self.symbol}...")
                     scraper.collect_all_data()
                     
-                    # Save HTML report
-                    html_file = scraper.save_html(filename)
+                    # Save HTML report to the temp directory explicitly
+                    html_file = scraper.save_html(full_path)
                 
                 # Process any captured output
                 captured_output = output_buffer.getvalue()
                 for line in captured_output.splitlines():
                     safe_print(line)
-                  # Check if any meaningful data was collected
+                
+                # Check if any meaningful data was collected
                 if not scraper.data or (isinstance(scraper.data, dict) and 
-                                       (not scraper.data.get('finviz') or
-                                        len(scraper.data.get('finviz', {})) <= 1)):
+                                      (not scraper.data.get('finviz') or
+                                       len(scraper.data.get('finviz', {})) <= 1)):
                     safe_print(f"No data found for symbol {self.symbol}")
                     self.data_ready.emit(False, f"Symbol {self.symbol} could not be found", "")
                 else:
                     # Success
                     safe_print(f"Data collection complete for {self.symbol}")
                     safe_print(f"Report saved to {filename}")
-                    self.data_ready.emit(True, "", filename)
+                    self.data_ready.emit(True, "", full_path)  # Return full path to the file
                 
             except Exception as e:
                 safe_error = str(e).encode('ascii', 'replace').decode('ascii')
@@ -300,6 +306,8 @@ class FileManager:
     """Manages files and file operations"""
     def __init__(self):
         self.base_dir = os.getcwd()
+        
+        # Use a temp_data folder in the current directory instead of user's home
         self.temp_dir = os.path.join(self.base_dir, "temp_data")
         
         # Create temp directory if it doesn't exist
@@ -313,7 +321,7 @@ class FileManager:
         
         all_files = []
         
-        # Process temp files
+        # Process temp files - these are ACTUALLY temporary files
         for file_path in temp_files:
             file_name = os.path.basename(file_path)
             match = re.search(r'([A-Z]+)_data_(\d+_\d+)', file_name)
@@ -327,11 +335,15 @@ class FileManager:
                     'date': formatted_date,
                     'date_obj': date_obj,
                     'path': file_path,
-                    'temp': True
+                    'temp': True  # Mark files from temp directory as temporary
                 })
         
         # Process saved files
         for file_path in saved_files:
+            # Skip files in the temp directory
+            if os.path.dirname(file_path) == self.temp_dir:
+                continue
+                
             file_name = os.path.basename(file_path)
             match = re.search(r'([A-Z]+)_data_(\d+_\d+)', file_name)
             if match:
@@ -350,16 +362,48 @@ class FileManager:
         # Sort files by date (newest first)
         all_files.sort(key=lambda x: x['date_obj'], reverse=True)
         return all_files
-
-    def save_file(self, temp_path):
-        """Move a file from temp to permanent storage"""
-        if os.path.exists(temp_path) and os.path.dirname(temp_path) == self.temp_dir:
-            filename = os.path.basename(temp_path)
-            new_path = os.path.join(self.base_dir, filename)
-            if os.path.exists(new_path):
-                os.remove(new_path)
-            shutil.copy2(temp_path, new_path)
-            return new_path
+    
+    def save_file(self, temp_path, target_dir=None):
+        """Move a file from temp to permanent storage
+        
+        Args:
+            temp_path: Path to the temporary file
+            target_dir: Optional target directory. If None, use the default location
+        """
+        if os.path.exists(temp_path):
+            # Make sure this is a path in the temp directory
+            norm_temp_dir = os.path.normpath(self.temp_dir)
+            norm_path_dir = os.path.normpath(os.path.dirname(temp_path))
+            
+            if norm_temp_dir == norm_path_dir:
+                filename = os.path.basename(temp_path)
+                
+                # Use specified target directory or default to base_dir
+                if target_dir and os.path.isdir(target_dir):
+                    new_path = os.path.join(target_dir, filename)
+                else:
+                    new_path = os.path.join(self.base_dir, filename)
+                
+                print(f"Moving {temp_path} to {new_path}")
+                
+                # Remove existing file with same name if it exists
+                if os.path.exists(new_path):
+                    os.remove(new_path)
+                    
+                # Copy file from temp to permanent location
+                shutil.copy2(temp_path, new_path)
+                
+                # Remove the temp file after copying
+                try:
+                    os.remove(temp_path)
+                except Exception as e:
+                    print(f"Warning: Could not remove temp file: {e}")
+                    
+                return new_path
+            else:
+                print(f"Error: Path {temp_path} is not in temp directory {self.temp_dir}")
+        else:
+            print(f"Error: File does not exist: {temp_path}")
         return None
     
     def delete_file(self, file_path):
@@ -507,6 +551,31 @@ class FinScanQt(QMainWindow):
         
         # Show default chart
         self.tradingview_widget.load_chart("NASDAQ:AAPL")
+    
+    def closeEvent(self, event):
+        """Handle application close event - clean up temp files"""
+        try:
+            self.cleanup_temp_files()
+        except Exception as e:
+            print(f"Error cleaning up temp files: {e}")
+        event.accept()
+    
+    def cleanup_temp_files(self):
+        """Clean up temporary files when the application closes"""
+        if hasattr(self, 'file_manager') and self.file_manager:
+            # Get all temporary files
+            temp_dir = self.file_manager.temp_dir
+            if os.path.exists(temp_dir):
+                print(f"Cleaning up temporary files in {temp_dir}")
+                try:
+                    # Delete all files in temp directory
+                    for filename in os.listdir(temp_dir):
+                        file_path = os.path.join(temp_dir, filename)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            print(f"Deleted temporary file: {filename}")
+                except Exception as e:
+                    print(f"Error deleting temp files: {e}")
         
     def init_ui(self):
         """Set up the user interface"""
