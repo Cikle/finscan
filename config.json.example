@@ -1,8 +1,0 @@
-{
-  "capital_com_api_key": "YourCapitalComAPIKey",
-  "capital_com_api_secret": "YourCapitalComAPISecret",
-  "other_api_keys": {
-    "polygon_io": "YourPolygonIOAPIKey",
-    "alpha_vantage": "YourAlphaVantageAPIKey"
-  }
-}

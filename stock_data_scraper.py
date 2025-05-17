@@ -22,7 +22,7 @@ except ImportError:
 # Load environment variables
 load_dotenv()
 
-class StockDataScraper:
+class StockDataScraper:    
     def __init__(self, symbol):
         self.symbol = symbol.upper()
         self.headers = {
@@ -32,7 +32,6 @@ class StockDataScraper:
             "symbol": self.symbol,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "finviz": {},
-            "capital_com": {},
             "openinsider": {},
             "yahoo_finance": {},
         }
@@ -88,45 +87,7 @@ class StockDataScraper:
                     self.data["finviz"]["Exchange"] = parts[2]
         print("✅ Finviz data collected")
         return self.data["finviz"]
-    
-    def get_capital_com_data(self):
-        """Get data from Capital.com API if credentials are available"""
-        print("ℹ️ Attempting to collect Capital.com data")
-        
-        if not self.config.get('capital_com_api_key'):
-            print("⚠️ Capital.com API key not found in config.json")
-            self.data["capital_com"] = {"error": "API key not configured"}
-            return self.data["capital_com"]
-        
-        api_key = self.config.get('capital_com_api_key')
-        api_secret = self.config.get('capital_com_api_secret', '')
-        
-        try:
-            # Instead of making an actual API call, gather some useful market info
-            symbol_data = {}
-            
-            # Check if we have other integration data from Finviz or Yahoo we can use
-            if self.data["finviz"]:
-                finviz_keys = ["Price", "Change", "Market Cap", "P/E", "Beta", "Volume"]
-                for key in finviz_keys:
-                    if key in self.data["finviz"]:
-                        symbol_data[key] = self.data["finviz"][key]
-            
-            # Add Capital.com specific fields
-            self.data["capital_com"] = {
-                "symbol": self.symbol,
-                "status": "market_data", # Changed from "simulated_data" to be clearer
-                "api_key_provided": bool(api_key),
-                "market_data": symbol_data,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "note": "Market data from Finviz (Capital.com API requires full authentication)"
-            }
-            print("✅ Market data collected for Capital.com integration")
-        except Exception as e:
-            print(f"⚠️ Error generating Capital.com data: {e}")
-            self.data["capital_com"] = {"error": str(e)}
-        
-        return self.data["capital_com"]
+      # Capital.com data collection has been removed in favor of using Finviz exclusively
     
     def get_openinsider_data(self):
         """Get insider trading data from OpenInsider"""
@@ -512,13 +473,11 @@ class StockDataScraper:
             self.data["competitors"] = {"error": str(e)}
         
         return self.data["competitors"]
-    
     def collect_all_data(self):
         """Collect data from all sources"""
         print(f"🔍 Collecting data for {self.symbol}...")
         
         self.get_finviz_data()
-        self.get_capital_com_data()
         self.get_openinsider_data()
         self.get_yahoo_finance_data()
         
@@ -569,8 +528,7 @@ class StockDataScraper:
                     border: 1px solid #ddd; 
                     padding: 8px; 
                     text-align: left;
-                }}
-                th {{ background-color: #f2f2f2; }}
+                }}                th {{ background-color: #f2f2f2; }}
                 tr:nth-child(even) {{ background-color: #f9f9f9; }}
                 .copy-btn {{
                     background-color: #4CAF50;
@@ -587,6 +545,27 @@ class StockDataScraper:
                 }}
                 .hidden {{ display: none; }}
                 #copyArea {{ width: 1px; height: 1px; }}
+                .expand-button {{
+                    background-color: #f2f2f2;
+                    border: 1px solid #ddd;
+                    padding: 8px 15px;
+                    margin: 10px 0;
+                    cursor: pointer;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    width: 100%;
+                    text-align: left;
+                }}
+                .expand-button:hover {{
+                    background-color: #e9e9e9;
+                }}
+                .expandable-content {{
+                    display: none;
+                    margin-top: 10px;
+                }}
+                .expandable-content.show {{
+                    display: block;
+                }}
                 .chart-container {{ 
                     position: relative; 
                     height: 250px;
@@ -756,13 +735,42 @@ class StockDataScraper:
                     <table>
                         <tr><th>Metric</th><th>Value</th></tr>
         """
+          # Add Finviz data
+        finviz_items = list(self.data["finviz"].items())
+        is_large_dataset = len(finviz_items) > 7
         
-        # Add Finviz data
-        for key, value in self.data["finviz"].items():
-            html_content += f"<tr><td>{key}</td><td>{value}</td></tr>\n"
+        if is_large_dataset:
+            # For large datasets, show first 7 rows and make the rest expandable
+            for i, (key, value) in enumerate(finviz_items[:7]):
+                html_content += f"<tr><td>{key}</td><td>{value}</td></tr>\n"
+            
+            html_content += f"""
+                    </table>
+                    <div class="expand-container">
+                        <button class="expand-button" onclick="toggleExpand('finviz-more')">Show More ({len(finviz_items) - 7} more items) ▼</button>
+                        <div id="finviz-more" class="expandable-content">
+                            <table>
+                                <tr><th>Metric</th><th>Value</th></tr>
+            """
+            
+            for key, value in finviz_items[7:]:
+                html_content += f"<tr><td>{key}</td><td>{value}</td></tr>\n"
+            
+            html_content += """
+                            </table>
+                        </div>
+                    </div>
+            """
+        else:
+            # For smaller datasets, show all rows
+            for key, value in finviz_items:
+                html_content += f"<tr><td>{key}</td><td>{value}</td></tr>\n"
+            
+            html_content += """
+                    </table>
+            """
         
         html_content += """
-                    </table>
                 </div>
             </div>
             
@@ -778,8 +786,7 @@ class StockDataScraper:
                     <p><strong>Sell Count:</strong> {self.data["openinsider"]["sell_count"]}</p>
                     <p><strong>Buy/Sell Ratio:</strong> {self.data["openinsider"]["buy_sell_ratio"]}</p>
             """
-        
-        # Add insider trading table if available
+          # Add insider trading table if available
         if "insider_trades" in self.data["openinsider"] and self.data["openinsider"]["insider_trades"]:
             html_content += """
                     <h3>Recent Insider Trades</h3>
@@ -794,14 +801,50 @@ class StockDataScraper:
                 
             html_content += "</tr>"
             
-            # Display all insider trade data
-            for trade in self.data["openinsider"]["insider_trades"]:
-                html_content += "<tr>"
-                for key in first_trade.keys():
-                    html_content += f"<td>{trade.get(key, '')}</td>"
-                html_content += "</tr>"
+            # Check if we need to make the table expandable
+            insider_trades = self.data["openinsider"]["insider_trades"]
+            is_large_dataset = len(insider_trades) > 7
             
-            html_content += "</table>\n"
+            if is_large_dataset:
+                # Show only first 7 trades
+                for trade in insider_trades[:7]:
+                    html_content += "<tr>"
+                    for key in first_trade.keys():
+                        html_content += f"<td>{trade.get(key, '')}</td>"
+                    html_content += "</tr>"
+                
+                html_content += """
+                    </table>
+                    <div class="expand-container">
+                        <button class="expand-button" onclick="toggleExpand('insider-more')">Show More Trades ▼</button>
+                        <div id="insider-more" class="expandable-content">
+                            <table>
+                                <tr>
+                """
+                
+                # Include headers again in the expanded section
+                for key in first_trade.keys():
+                    html_content += f"<th>{key}</th>"
+                
+                html_content += "</tr>"
+                
+                # Add the remaining trades
+                for trade in insider_trades[7:]:
+                    html_content += "<tr>"
+                    for key in first_trade.keys():
+                        html_content += f"<td>{trade.get(key, '')}</td>"
+                    html_content += "</tr>"
+                
+                html_content += "</table></div></div>\n"
+            else:
+                # Display all insider trade data when it's a smaller set
+                for trade in insider_trades:
+                    html_content += "<tr>"
+                    for key in first_trade.keys():
+                        html_content += f"<td>{trade.get(key, '')}</td>"
+                    html_content += "</tr>"
+                
+                html_content += "</table>\n"
         
         html_content += """
                 </div>
@@ -940,23 +983,7 @@ class StockDataScraper:
             html_content += """
                     </div>
                 </div>
-            """
-          # Add Capital.com data if available
-        if self.data["capital_com"] and "error" not in self.data["capital_com"]:
-            html_content += """
-                <div class="section">
-                    <h2>Capital.com Data</h2>
-                    <div class="card">
-                        <pre id="capitalComData">
-            """
-            
-            html_content += json.dumps(self.data["capital_com"], indent=2)
-            
-            html_content += """
-                        </pre>
-                    </div>
-                </div>
-            """
+            """          # Capital.com section has been removed in favor of using Finviz exclusively
         
         # Add JavaScript for copying data
         html_content += """
@@ -1053,31 +1080,7 @@ class StockDataScraper:
             for key, value in self.data["competitors"]["comparison"]["this_company"].items():
                 if key != "symbol" and value:
                     html_content += f"  {key.replace('_', ' ').title()}: {value}\\n"
-        
-        # Add Capital.com data to the copy text
-        if self.data["capital_com"] and "error" not in self.data["capital_com"]:
-            html_content += """
-                    
-                    === CAPITAL.COM DATA ===
-            """
-            
-            # Format the capital.com data nicely for the text copy
-            capital_data = self.data["capital_com"]
-            
-            # Add the main Capital.com fields
-            html_content += f"Symbol: {capital_data.get('symbol', '')}\\n"
-            html_content += f"Status: {capital_data.get('status', '')}\\n"
-            html_content += f"Timestamp: {capital_data.get('timestamp', '')}\\n"
-            
-            # Add market_data if available
-            if "market_data" in capital_data and isinstance(capital_data["market_data"], dict):
-                html_content += "\\nMarket Data:\\n"
-                for key, value in capital_data["market_data"].items():
-                    html_content += f"  {key}: {value}\\n"
-            
-            # Add any notes
-            if "note" in capital_data:
-                html_content += f"\\nNote: {capital_data['note']}\\n"
+          # Capital.com data section has been removed in favor of using Finviz exclusively
             
             html_content += """`;
                     
@@ -1087,8 +1090,29 @@ class StockDataScraper:
                     copyArea.select();
                     document.execCommand('copy');
                     copyArea.classList.add('hidden');
+                      // Show non-blocking notification instead of alert
+                    const notification = document.createElement('div');
+                    notification.textContent = 'Copied to clipboard!';
+                    notification.style.position = 'fixed';
+                    notification.style.top = '20px';
+                    notification.style.left = '50%';
+                    notification.style.transform = 'translateX(-50%)';
+                    notification.style.backgroundColor = '#4CAF50';
+                    notification.style.color = 'white';
+                    notification.style.padding = '10px 20px';
+                    notification.style.borderRadius = '4px';
+                    notification.style.zIndex = '1000';
+                    notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                    document.body.appendChild(notification);
                     
-                    alert('All data copied to clipboard! Ready to paste into trading AI.');
+                    // Remove the notification after 2 seconds
+                    setTimeout(() => {
+                        notification.style.opacity = '0';
+                        notification.style.transition = 'opacity 0.5s';
+                        setTimeout(() => {
+                            document.body.removeChild(notification);
+                        }, 500);
+                    }, 2000);
                 }
                 
                 // Function to populate the dashboard with data
@@ -1459,15 +1483,37 @@ class StockDataScraper:
                             }
                         });
                     }
+                }                // Run the dashboard population when the page loads
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Initialize expandable sections as closed first
+                    const expandableSections = document.querySelectorAll('.expandable-content');
+                    expandableSections.forEach(section => {
+                        section.classList.remove('show');
+                    });
+                    
+                    // Then populate the dashboard data
+                    populateDashboard();
+                });
+                  
+                // Function to toggle expandable content
+                function toggleExpand(id) {
+                    const content = document.getElementById(id);
+                    if (content) {
+                        content.classList.toggle('show');
+                        const button = document.querySelector(`button[onclick*="${id}"]`);
+                        if (button) {
+                            if (content.classList.contains('show')) {
+                                button.textContent = button.textContent.replace('▼', '▲');
+                            } else {
+                                button.textContent = button.textContent.replace('▲', '▼');
+                            }
+                        }
+                    }
                 }
-                
-                // Run the dashboard population when the page loads
-                document.addEventListener('DOMContentLoaded', populateDashboard);
             </script>
         </body>
         </html>
         """
-        
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(html_content)
         
@@ -1481,6 +1527,7 @@ def main():
     parser.add_argument('--json', action='store_true', help='Save data as JSON')
     parser.add_argument('--html', action='store_true', help='Save data as HTML (default)')
     parser.add_argument('--output', '-o', help='Output filename')
+    parser.add_argument('--no-browser', action='store_true', help='Do not open the report in browser automatically')
     
     args = parser.parse_args()
     
@@ -1493,10 +1540,20 @@ def main():
     
     if args.json:
         scraper.save_json(args.output)
-    
     if args.html:
         html_file = scraper.save_html(args.output)
-        print(f"📊 Open {html_file} in your browser to view the report")
+        print(f"📊 Report saved to {html_file}")
+        
+        # Open the report in the default browser silently without any popup
+        # Only if --no-browser flag is not set
+        if not args.no_browser:
+            try:
+                import webbrowser
+                # Using 'new=0' and 'autoraise=False' to avoid focus stealing and any popup dialogs
+                webbrowser.open(html_file, new=0, autoraise=False)
+            except Exception as e:
+                # Just print a message if opening the browser fails, don't show an error popup
+                print(f"Note: Could not open browser automatically ({str(e)})")
 
 
 if __name__ == "__main__":

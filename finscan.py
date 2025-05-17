@@ -1109,7 +1109,8 @@ class FinScanQt(QMainWindow):
     def update_console(self, text):
         """Update console output with new text"""
         self.console_output.append(text)
-        self.console_output.ensureCursorVisible()
+        self.console_output.ensureCursorVisible()    
+    
     def on_stock_data_ready(self, success, error, symbol, filename):
         """Handle completion of stock data generation"""
         self.progress_bar.hide()
@@ -1126,17 +1127,6 @@ class FinScanQt(QMainWindow):
                     self.files_table.selectRow(i)
                     break
                     
-            # Ask if user wants to view the report
-            confirm = QMessageBox.question(
-                self,
-                "View Report",
-                f"Data for {symbol} collected successfully. Would you like to view the report?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
-            
-            if confirm == QMessageBox.Yes:
-                self.on_view_clicked()
         else:
             if "could not be found" in error:
                 self.status_label.setText(f"Symbol {symbol} could not be found!")
