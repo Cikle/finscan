@@ -158,55 +158,78 @@ class TradingViewWidget(QWebEngineView):
         
     def load_chart(self, symbol):
         """Load TradingView chart for the given symbol"""
-        # Using a simplified HTML template with ES5 syntax for compatibility
+        # Use a very simple static image chart to avoid JavaScript issues
         html = """
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>TradingView Chart</title>
+            <title>Stock Chart</title>
             <style>
-                body, html { margin: 0; padding: 0; height: 100%; }
-                .tradingview-widget-container { height: 100%; }
+                body, html { 
+                    margin: 0; 
+                    padding: 0; 
+                    height: 100%; 
+                    width: 100%; 
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    background-color: #1e1e1e;
+                    color: white;
+                    font-family: Arial, sans-serif;
+                }
+                .chart-container {
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .symbol {
+                    font-size: 24px;
+                    margin-bottom: 10px;
+                }
+                .chart-image {
+                    width: 90%;
+                    height: 80%;
+                    background-size: contain;
+                    background-repeat: no-repeat;
+                    background-position: center;
+                }
+                .note {
+                    margin-top: 10px;
+                    color: #999;
+                }
+                .button {
+                    margin-top: 10px;
+                    padding: 8px 16px;
+                    background-color: #2962ff;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    text-decoration: none;
+                }
             </style>
         </head>
         <body>
-            <!-- TradingView Widget BEGIN -->
-            <div class="tradingview-widget-container">
-                <div id="tradingview_chart" style="height: 100%;"></div>
+            <div class="chart-container">
+                <div class="symbol">REPLACE_SYMBOL</div>
+                <div class="chart-image" style="background-image: url('https://charts2.finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l');"></div>
+                <div class="note">Chart data from Finviz</div>
+                <a class="button" href="https://www.tradingview.com/chart/?symbol=REPLACE_SYMBOL" target="_blank">Open in TradingView</a>
             </div>
-            
-            <script type="text/javascript">
-            // Create a script element to load TradingView
-            var script = document.createElement('script');
-            script.src = 'https://s3.tradingview.com/tv.js';
-            script.onload = function() {
-                // Create widget after script is loaded
-                var widget = new TradingView.widget({
-                    "width": "100%",
-                    "height": "100%",
-                    "symbol": "REPLACE_SYMBOL",
-                    "interval": "D",
-                    "timezone": "Etc/UTC",
-                    "theme": "dark",
-                    "style": "1",
-                    "locale": "en",
-                    "toolbar_bg": "#f1f3f6",
-                    "enable_publishing": false,
-                    "allow_symbol_change": true,
-                    "container_id": "tradingview_chart"
-                });
-            };
-            document.body.appendChild(script);
-            </script>
-            <!-- TradingView Widget END -->
         </body>
         </html>
         """
         
-        # Replace the symbol placeholder
+        # Replace the symbol placeholder and extract just the symbol part without exchange
+        symbol_only = symbol.split(':')[-1] if ':' in symbol else symbol
         html = html.replace("REPLACE_SYMBOL", symbol)
+        html = html.replace("SYMBOL_ONLY", symbol_only)
         self.setHtml(html)
 
 
