@@ -85,11 +85,17 @@ class StockDataThread(QThread):
                 captured_output = output_buffer.getvalue()
                 for line in captured_output.splitlines():
                     safe_print(line)
-                
-                # Success
-                safe_print(f"Data collection complete for {self.symbol}")
-                safe_print(f"Report saved to {filename}")
-                self.data_ready.emit(True, "", filename)
+                  # Check if any meaningful data was collected
+                if not scraper.data or (isinstance(scraper.data, dict) and 
+                                       (not scraper.data.get('finviz') or
+                                        len(scraper.data.get('finviz', {})) <= 1)):
+                    safe_print(f"No data found for symbol {self.symbol}")
+                    self.data_ready.emit(False, f"Symbol {self.symbol} could not be found", "")
+                else:
+                    # Success
+                    safe_print(f"Data collection complete for {self.symbol}")
+                    safe_print(f"Report saved to {filename}")
+                    self.data_ready.emit(True, "", filename)
                 
             except Exception as e:
                 safe_error = str(e).encode('ascii', 'replace').decode('ascii')
@@ -158,7 +164,10 @@ class TradingViewWidget(QWebEngineView):
         
     def load_chart(self, symbol):
         """Load TradingView chart for the given symbol"""
-        # Use a very simple static image chart to avoid JavaScript issues
+        # Extract just the symbol part without exchange
+        symbol_only = symbol.split(':')[-1] if ':' in symbol else symbol
+        
+        # Use a more reliable chart method with direct image embedding
         html = """
         <!DOCTYPE html>
         <html>
@@ -187,24 +196,30 @@ class TradingViewWidget(QWebEngineView):
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
+                    text-align: center;
                 }
                 .symbol {
                     font-size: 24px;
-                    margin-bottom: 10px;
+                    margin-bottom: 20px;
+                    font-weight: bold;
                 }
                 .chart-image {
-                    width: 90%;
-                    height: 80%;
-                    background-size: contain;
-                    background-repeat: no-repeat;
-                    background-position: center;
+                    width: 95%;
+                    max-width: 1200px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                }
+                .chart-image:hover {
+                    transform: scale(1.01);
+                    transition: transform 0.3s ease;
                 }
                 .note {
                     margin-top: 10px;
                     color: #999;
+                    font-size: 12px;
                 }
                 .button {
-                    margin-top: 10px;
+                    margin-top: 15px;
                     padding: 8px 16px;
                     background-color: #2962ff;
                     color: white;
@@ -212,24 +227,59 @@ class TradingViewWidget(QWebEngineView):
                     border-radius: 4px;
                     cursor: pointer;
                     text-decoration: none;
+                    font-weight: bold;
+                    transition: background-color 0.2s;
+                }
+                .button:hover {
+                    background-color: #1E52E0;
+                }
+                .buttons-container {
+                    margin-top: 10px;
+                    display: flex;
+                    gap: 10px;
                 }
             </style>
         </head>
         <body>
             <div class="chart-container">
                 <div class="symbol">REPLACE_SYMBOL</div>
-                <div class="chart-image" style="background-image: url('https://charts2.finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l');"></div>
+                <!-- Use direct img tag instead of background-image for better reliability -->
+                <img class="chart-image" src="https://charts2.finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l" alt="SYMBOL_ONLY Chart" onerror="this.onerror=null; this.src='https://finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l';">
                 <div class="note">Chart data from Finviz</div>
-                <a class="button" href="https://www.tradingview.com/chart/?symbol=REPLACE_SYMBOL" target="_blank">Open in TradingView</a>
+                <div class="buttons-container">
+                    <a class="button" href="https://www.tradingview.com/chart/?symbol=REPLACE_SYMBOL" target="_blank">Open in TradingView</a>
+                    <a class="button" href="https://finviz.com/quote.ashx?t=SYMBOL_ONLY" target="_blank">View on Finviz</a>
+                </div>
             </div>
+            
+            <!-- Script to handle image loading errors -->
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const img = document.querySelector('.chart-image');
+                    img.onerror = function() {
+                        // Try alternative source if the first one fails
+                        this.src = 'https://finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l';
+                        
+                        // If still fails, show error message
+                        this.onerror = function() {
+                            this.style.display = 'none';
+                            const container = document.querySelector('.chart-container');
+                            const errorMsg = document.createElement('div');
+                            errorMsg.innerHTML = '<p style="color: #ff6b6b; font-size: 18px;">Unable to load chart for SYMBOL_ONLY</p>';
+                            container.insertBefore(errorMsg, document.querySelector('.note'));
+                        };
+                    };
+                });
+            </script>
         </body>
         </html>
         """
         
-        # Replace the symbol placeholder and extract just the symbol part without exchange
-        symbol_only = symbol.split(':')[-1] if ':' in symbol else symbol
+        # Replace the symbol placeholder
         html = html.replace("REPLACE_SYMBOL", symbol)
         html = html.replace("SYMBOL_ONLY", symbol_only)
+        
+        # Apply the HTML
         self.setHtml(html)
 
 
@@ -512,34 +562,64 @@ class FinScanQt(QMainWindow):
         files_layout.addLayout(buttons_layout)
         files_group.setLayout(files_layout)
         left_layout.addWidget(files_group)
-        
-        # Right panel (tabs with chart and data)
+          # Right panel (tabs with chart and data)
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         
         self.tab_widget = QTabWidget()
         
-        # Trading View Chart tab
-        chart_tab = QWidget()
-        chart_layout = QVBoxLayout(chart_tab)
+        # Combined Chart and Metrics tab
+        combined_tab = QWidget()
+        combined_layout = QVBoxLayout(combined_tab)
+        
+        # Symbol header
+        self.symbol_header = QLabel("")
+        self.symbol_header.setAlignment(Qt.AlignCenter)
+        self.symbol_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        combined_layout.addWidget(self.symbol_header)
+        
+        # Create splitter for chart and metrics
+        metrics_splitter = QSplitter(Qt.Vertical)
+        
+        # Trading View Chart
+        chart_container = QWidget()
+        chart_layout = QVBoxLayout(chart_container)
         chart_layout.setContentsMargins(0, 0, 0, 0)
         
         self.tradingview_widget = TradingViewWidget()
         chart_layout.addWidget(self.tradingview_widget)
         
-        self.tab_widget.addTab(chart_tab, "TradingView Chart")
-        
-        # Stock metrics tab
-        metrics_tab = QWidget()
-        metrics_layout = QVBoxLayout(metrics_tab)
+        # Stock metrics
+        metrics_container = QWidget()
+        metrics_layout = QVBoxLayout(metrics_container)
+        metrics_layout.setContentsMargins(10, 10, 10, 10)
         
         self.metrics_display = QTextEdit()
         self.metrics_display.setReadOnly(True)
         self.metrics_display.setFont(QFont("Segoe UI", 10))
         metrics_layout.addWidget(self.metrics_display)
         
-        self.tab_widget.addTab(metrics_tab, "Key Metrics")
+        # Add widgets to splitter
+        metrics_splitter.addWidget(chart_container)
+        metrics_splitter.addWidget(metrics_container)
+        
+        # Set initial sizes (60% chart, 40% metrics)
+        metrics_splitter.setSizes([600, 400])
+        
+        combined_layout.addWidget(metrics_splitter)
+        combined_tab.setLayout(combined_layout)
+        
+        self.tab_widget.addTab(combined_tab, "Chart & Metrics")
+        
+        # HTML Report tab (will be populated when a report is selected)
+        self.report_tab = QWidget()
+        report_layout = QVBoxLayout(self.report_tab)
+        
+        self.report_view = QWebEngineView()
+        report_layout.addWidget(self.report_view)
+        
+        self.tab_widget.addTab(self.report_tab, "Full Report")
         
         right_layout.addWidget(self.tab_widget)
         
@@ -641,8 +721,7 @@ class FinScanQt(QMainWindow):
             
             if file_info['temp']:
                 status_item.setForeground(QColor(255, 140, 0))  # Orange for temporary
-            else:
-                status_item.setForeground(QColor(0, 128, 0))  # Green for saved
+            else:                status_item.setForeground(QColor(0, 128, 0))  # Green for saved
                 
             self.files_table.setItem(row, 0, symbol_item)
             self.files_table.setItem(row, 1, date_item)
@@ -669,8 +748,27 @@ class FinScanQt(QMainWindow):
                 if content:
                     metrics = StockDataProcessor.extract_metrics_from_html(content)
                     
+                    # Extract company name from the content (if available)
+                    company_name = ""
+                    company_match = re.search(r'<h1[^>]*>([^<]+)</h1>', content)
+                    if company_match:
+                        company_name = company_match.group(1).strip()
+                        if file_info['symbol'] in company_name:
+                            company_name = company_name.replace(file_info['symbol'], '').strip()
+                            # Remove any remaining parentheses
+                            company_name = re.sub(r'[\(\)]', '', company_name).strip()
+                    
+                    # Update the symbol header
+                    header_text = f"{file_info['symbol']}"
+                    if company_name:
+                        header_text += f" - {company_name}"
+                    self.symbol_header.setText(header_text)
+                    
                     # Format metrics for display
                     formatted_metrics = f"<h2>{file_info['symbol']} Key Metrics</h2>"
+                    if company_name:
+                        formatted_metrics = f"<h2>{file_info['symbol']} - {company_name}</h2>"
+                    
                     formatted_metrics += f"<p><b>Report Date:</b> {file_info['date']}</p>"
                     
                     formatted_metrics += "<h3>Market Data</h3>"
@@ -699,11 +797,18 @@ class FinScanQt(QMainWindow):
                     
                     # Update chart with the symbol
                     self.tradingview_widget.load_chart(f"NASDAQ:{file_info['symbol']}")
+                    
+                    # Load the full HTML report in the report tab
+                    self.report_view.load(QUrl.fromLocalFile(file_info['path']))
+                    
+                    # Switch to the combined tab
+                    self.tab_widget.setCurrentIndex(0)
         else:
             self.view_btn.setEnabled(False)
             self.save_btn.setEnabled(False)
             self.delete_btn.setEnabled(False)
             self.current_file = None
+            self.symbol_header.setText("")
     
     def on_file_double_clicked(self, row, column):
         """Handle double-click on file in the list"""
@@ -771,7 +876,6 @@ class FinScanQt(QMainWindow):
         """Update console output with new text"""
         self.console_output.append(text)
         self.console_output.ensureCursorVisible()
-        
     def on_stock_data_ready(self, success, error, symbol, filename):
         """Handle completion of stock data generation"""
         self.progress_bar.hide()
@@ -800,8 +904,12 @@ class FinScanQt(QMainWindow):
             if confirm == QMessageBox.Yes:
                 self.on_view_clicked()
         else:
-            self.status_label.setText(f"Error collecting data for {symbol}!")
-            QMessageBox.critical(self, "Error", f"Failed to generate data: {error}")
+            if "could not be found" in error:
+                self.status_label.setText(f"Symbol {symbol} could not be found!")
+                QMessageBox.critical(self, "Symbol Not Found", f"Symbol {symbol} could not be found in our data sources.")
+            else:
+                self.status_label.setText(f"Error collecting data for {symbol}!")
+                QMessageBox.critical(self, "Error", f"Failed to generate data: {error}")
 
 
 def main():
