@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QPushButton, QLabel, QLineEdit, 
                             QTableWidget, QTableWidgetItem, QSplitter, QTabWidget, 
                             QProgressBar, QTextEdit, QMessageBox, QHeaderView, 
-                            QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox)
+                            QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox, QMenu)
 from PyQt5.QtCore import QSettings
 from PyQt5.QtCore import Qt, QUrl, pyqtSlot, QSize, QThread, pyqtSignal, QTimer, QObject
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -602,6 +602,23 @@ class FileManager:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         return None
+        
+    def cleanup_temp_files(self):
+        """Delete all temporary files"""
+        if not os.path.exists(self.temp_dir):
+            return 0
+            
+        count = 0
+        temp_files = glob.glob(os.path.join(self.temp_dir, "*_data_*.html"))
+        for file_path in temp_files:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    count += 1
+                except Exception as e:
+                    print(f"Error removing temporary file {file_path}: {e}")
+        
+        return count
 
 
 class StockDataProcessor:
@@ -731,39 +748,76 @@ class FinScanQt(QMainWindow):
         
         self.init_ui()
         self.populate_file_list()
-        
-        # Apply styling
+          # Apply styling
         self.apply_style()
-        
-        # Show default chart
+          # Show default chart
         self.tradingview_widget.load_chart("NASDAQ:NVDA")
         
         # Set the main window reference in WebBridge objects
         self.tradingview_widget.bridge.main_window = self
-    
-    def open_url_in_tab(self, url, title):
-        """Opens a URL in a new tab"""
-        # Create a new web view for the tab
-        web_view = QWebEngineView()
-        web_view.load(QUrl(url))
         
-        # Add to tab widget
-        tab_index = self.tab_widget.addTab(web_view, title)
-        self.tab_widget.setCurrentIndex(tab_index)
+        # Setup tab context menu for closing tabs
+        self.setup_tab_context_menu()
+    def closeEvent(self, event):
+        """Handle application close event - cleanup temporary files"""
+        try:
+            # Use the cleanup method from FileManager
+            deleted_count = self.file_manager.cleanup_temp_files()
+            print(f"Cleanup: Deleted {deleted_count} temporary files.")
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+        # Accept the close event
+        event.accept()
         
-        # Add a close button to the tab
-        close_button = QPushButton("×")
-        close_button.setFixedSize(20, 20)
-        close_button.setStyleSheet("QPushButton { border: none; color: #777; } QPushButton:hover { color: #f00; }")
-        close_button.clicked.connect(lambda: self.close_tab(tab_index))
-        self.tab_widget.tabBar().setTabButton(tab_index, self.tab_widget.tabBar().RightSide, close_button)
-        
-    def close_tab(self, index):
+    def close_tab(self, index=None):
         """Close a tab by index"""
-        # Don't close the first five tabs (Chart & Metrics, Full Report, Finviz, OpenInsider, Yahoo Finance)
-        if index > 4:
+        # If index is None, use the current index
+        if index is None:
+            index = self.tab_widget.currentIndex()
+        
+        # Ensure the index is valid before trying to close
+        if 0 <= index < self.tab_widget.count() and index > 4:
+            # Only close tabs beyond the default ones (index > 4)
             self.tab_widget.removeTab(index)
-    
+    def close_all_extra_tabs(self):
+        """Close all tabs beyond the default tabs"""
+        # Get the current number of tabs
+        tab_count = self.tab_widget.count()
+        
+        # Remove tabs from the end to avoid index issues
+        # Keep the first 5 default tabs
+        for i in range(tab_count-1, 4, -1):
+            self.tab_widget.removeTab(i)
+        
+        # Switch to the Chart & Metrics tab
+        self.tab_widget.setCurrentIndex(0)
+        
+    def setup_tab_context_menu(self):
+        """Set up context menu for tabs"""
+        self.tab_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tab_widget.customContextMenuRequested.connect(self.show_tab_context_menu)
+    def show_tab_context_menu(self, position):
+        """Show context menu for tabs"""
+        # Create context menu
+        context_menu = QMenu()
+        
+        # Get the tab index under the cursor
+        tab_bar = self.tab_widget.tabBar()
+        tab_index = tab_bar.tabAt(position)
+          # Add "Close Tab" option if this is not a default tab (index > 4)
+        if tab_index > 4:
+            close_tab_action = context_menu.addAction(f"Close Tab: {self.tab_widget.tabText(tab_index)}")
+            # Use explicit capture of tab_index to avoid lambda capturing issues
+            close_tab_action.triggered.connect(lambda checked, idx=tab_index: self.close_tab(idx))
+            context_menu.addSeparator()
+        
+        # Add actions
+        close_all_action = context_menu.addAction("Close All Extra Tabs")
+        close_all_action.triggered.connect(self.close_all_extra_tabs)
+        
+        # Show the menu
+        context_menu.exec_(self.tab_widget.mapToGlobal(position))
+
     def init_ui(self):
         """Set up the user interface"""
         self.setWindowTitle("FinScan Qt - Stock Data Analyzer")
@@ -1403,28 +1457,19 @@ class FinScanQt(QMainWindow):
             # Load Yahoo Finance tab
             yahoo_url = f"https://finance.yahoo.com/quote/{symbol}"
             self.yahoo_view.load(QUrl(yahoo_url))
-    
     def on_file_double_clicked(self, row, column):
         """Handle double-click on file in the list"""
         self.on_view_clicked()
         
     def on_view_clicked(self):
-        """View selected report in a new tab"""
+        """Open selected report in the default web browser"""
         if self.current_file and os.path.exists(self.current_file['path']):
-            # Create a new web view for the tab
-            web_view = QWebEngineView()
-            web_view.load(QUrl.fromLocalFile(self.current_file['path']))
+            # Open the file in the default web browser
+            self.status_label.setText(f"Opening {self.current_file['symbol']} report in browser...")
+            webbrowser.open(f"file://{self.current_file['path']}")
             
-            # Add to tab widget
-            tab_index = self.tab_widget.addTab(web_view, f"External View - {self.current_file['symbol']}")
-            self.tab_widget.setCurrentIndex(tab_index)
-            
-            # Add a close button to the tab
-            close_button = QPushButton("×")
-            close_button.setFixedSize(20, 20)
-            close_button.setStyleSheet("QPushButton { border: none; color: #777; } QPushButton:hover { color: #f00; }")
-            close_button.clicked.connect(lambda: self.close_tab(tab_index))
-            self.tab_widget.tabBar().setTabButton(tab_index, self.tab_widget.tabBar().RightSide, close_button)
+            # Auto-clear the message after 2 seconds
+            QTimer.singleShot(2000, lambda: self.status_label.setText("Ready to collect stock data..."))
     
     def on_save_clicked(self):
         """Save temporary file to permanent storage"""
