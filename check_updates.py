@@ -14,7 +14,7 @@ from datetime import datetime
 import webbrowser
 
 # Current version
-VERSION = "1.0.0"  # Update this when releasing new versions
+VERSION = "1.0.1"  # Update this when releasing new versions
 
 class UpdateChecker:
     """Handles checking for and applying updates to the FinScan application"""
