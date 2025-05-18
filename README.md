@@ -1,5 +1,7 @@
 # FinScan Qt - Stock Market Data Analysis Tool
 
+[![Download Latest Release](https://img.shields.io/github/v/release/cyrluz/finscan?label=Download&style=for-the-badge)](https://github.com/cyrluz/finscan/releases/latest)
+
 FinScan Qt is a modern, feature-rich desktop application for analyzing stock market data with a user-friendly interface.
 
 ![FinScan Qt](finscan.ico)
