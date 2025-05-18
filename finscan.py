@@ -1540,7 +1540,7 @@ class FinScanQt(QMainWindow):
         
         if update_dialog.exec_() == QMessageBox.Yes:
             # User accepted the update - open the update URL
-            webbrowser.open("https://github.com/cyrluz/FinScanQt/releases")
+            webbrowser.open("https://github.com/cikle/FinScanQt/releases")
         
         self.status_label.setText("Ready to collect stock data...")
     
