@@ -1604,7 +1604,7 @@ class FinScanQt(QMainWindow):
         about_dialog = QMessageBox(self)
         about_dialog.setWindowTitle("About FinScan Qt")
         about_dialog.setText("FinScan Qt - Stock Data Analyzer")
-        about_dialog.setInformativeText("A modern Qt-based interface for stock data analysis.\n\nCopyright (c) 2025 Cyril Lutziger\nLicense: MIT (see LICENSE file for details)")
+        about_dialog.setInformativeText("A modern Qt-based interface for stock data analysis.\n\nCopyright (c) 2025 Cyril Lutziger | Cikle \nLicense: MIT (see LICENSE file for details)")
         about_dialog.setStandardButtons(QMessageBox.Ok)
         about_dialog.exec_()
         
