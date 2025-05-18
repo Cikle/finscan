@@ -75,12 +75,15 @@ class UpdateChecker:
             owner = config['repo_owner']
             repo = config['repo_name']
             api_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-            
-            # Request latest release info
+              # Request latest release info
+            print(f"Checking for updates at: {api_url}")
             response = requests.get(api_url, timeout=10)
+            
             if response.status_code == 200:
                 release_info = response.json()
                 latest_version = release_info.get('tag_name', '').lstrip('v')
+                
+                print(f"Found remote version: {latest_version}, local version: {self.version}")
                 
                 # Compare versions
                 if self._compare_versions(latest_version, self.version) > 0:
@@ -96,6 +99,11 @@ class UpdateChecker:
                         'published_date': release_info.get('published_at', '')
                     }
                     return True
+            else:
+                # Handle API errors
+                error_info = response.json() if response.content else {"message": "No response content"}
+                print(f"GitHub API Error: {response.status_code} - {error_info.get('message', 'Unknown error')}")
+                print(f"Make sure the repository {owner}/{repo} exists and has releases.")
             
             return False
             
