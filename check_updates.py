@@ -34,19 +34,18 @@ class UpdateChecker:
         
         if auto_check:
             self.check_for_updates()
-    
     def check_for_updates(self):
         """Check for available updates using multiple methods
         
         Returns:
             bool: True if updates are available, False otherwise
         """
-        # Try GitHub API first (if repository exists)
-        if self._check_github_updates():
-            return True
-        
-        # Try local Git repository (if exists)
+        # Try local Git repository first (if exists)
         if self._check_git_updates():
+            return True
+            
+        # Try GitHub API (if repository releases exist)
+        if self._check_github_updates():
             return True
         
         # Try direct version check from a server (if configured)
@@ -110,14 +109,16 @@ class UpdateChecker:
         except Exception as e:
             print(f"Error checking GitHub updates: {e}")
             return False
-    
     def _check_git_updates(self):
         """Check for updates using Git commands (if the app is in a Git repo)"""
         try:
             # Check if .git directory exists
             if not os.path.exists('.git'):
+                print("No Git repository found (.git directory not found)")
                 return False
                 
+            print("Git repository found. Fetching latest updates...")
+            
             # Try to run git fetch
             fetch_result = subprocess.run(
                 ['git', 'fetch'], 
@@ -126,6 +127,7 @@ class UpdateChecker:
                 check=False
             )
             if fetch_result.returncode != 0:
+                print(f"Git fetch failed: {fetch_result.stderr}")
                 return False
                 
             # Check if we're behind the remote
@@ -136,26 +138,44 @@ class UpdateChecker:
                 check=False
             )
             
+            print(f"Git status: {status_result.stdout.strip()}")
+            
+            # Get current branch
+            branch_result = subprocess.run(
+                ['git', 'branch', '--show-current'], 
+                capture_output=True, 
+                text=True,
+                check=False
+            )
+            current_branch = branch_result.stdout.strip()
+            if not current_branch:
+                current_branch = "main"  # Default to main if branch detection fails
+            
             # If we're behind, updates are available
             if "Your branch is behind" in status_result.stdout:
                 # Get the number of commits behind
                 count_result = subprocess.run(
-                    ['git', 'rev-list', 'HEAD..origin/main', '--count'], 
+                    ['git', 'rev-list', f'HEAD..origin/{current_branch}', '--count'], 
                     capture_output=True, 
                     text=True,
                     check=False
                 )
                 commit_count = count_result.stdout.strip()
                 
+                print(f"Updates available: {commit_count} commits behind origin/{current_branch}")
+                
                 # Store update information
                 self.update_available = True
                 self.update_info = {
                     'type': 'git',
                     'commits_behind': commit_count,
+                    'branch': current_branch,
                     'message': f"Your local version is {commit_count} commits behind the latest version."
                 }
                 
                 return True
+            else:
+                print("Your local version is up to date with the remote repository.")
                 
             return False
             
