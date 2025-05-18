@@ -2,6 +2,9 @@
 """
 FinScan Qt - A modern Qt-based interface for stock data analysis
 All-in-one version that handles Unicode encoding directly
+
+Copyright (c) 2025 Cyril Lutziger
+License: MIT (see LICENSE file for details)
 """
 import sys
 import os

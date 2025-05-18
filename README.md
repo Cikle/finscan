@@ -1,66 +1,187 @@
-# FinScan Desktop Application
+# FinScan Qt - Stock Market Data Analysis Tool
 
-A graphical user interface for the FinScan stock data scraper.
+FinScan Qt is a modern, feature-rich desktop application for analyzing stock market data with a user-friendly interface.
+
+![FinScan Qt](finscan.ico)
 
 ## Features
 
-- **Easy to use**: Input a stock symbol and click "Generate Data"
-- **Real-time console output**: See the scraper's progress live
-- **File manager**: Easy access to all generated reports
-- **One-click viewing**: Double-click any report to open it in your browser
-- **Example symbols**: Quick buttons for popular stocks
+- **Advanced Stock Data Analysis**: Collect and visualize comprehensive stock data
+- **Intuitive Qt Interface**: Clean, responsive interface with collapsible sections
+- **Real-time Data Collection**: Live progress tracking during data acquisition
+- **Integrated File Management**: Easily access, view, and manage all your reports
+- **TradingView Charts Integration**: View interactive stock charts directly in the app
+- **Insider Trading Analysis**: Track buying and selling patterns of company insiders
+- **Financial Metrics**: Access key valuation, technical, and growth metrics
 
-## Installation
+## Requirements
 
-The desktop application requires Python with Tkinter (included in standard Python installations).
+- Python 3.8 or higher
+- Required Python packages (automatically installed during setup)
 
-No additional dependencies are required beyond those already needed for the stock data scraper.
+## Quick Installation
+
+### Windows Users
+
+1. **One-Click Setup**: Double-click the `install_finscan.bat` file to install and set up shortcuts
+
+The installer will:
+- Install required Python packages
+- Create a desktop shortcut with the FinScan icon
+- Add FinScan to your Start Menu
+- Offer to run the application immediately
+
+### Manual Installation
+
+If you prefer to install manually:
+
+```bash
+# Install requirements first
+pip install -r requirements.txt
+
+# Then simply run the launcher
+launch_finscan.bat
+```
 
 ## Running the Application
 
 ### Windows
 
-Double-click the `launch_finscan.bat` file to start the application.
+There are three ways to launch FinScan:
 
-### Mac/Linux or Command Line
+1. **From Desktop**: Click the FinScan desktop shortcut created during installation
+2. **From Start Menu**: Find and click FinScan in your Start Menu
+3. **Direct Launch**: Double-click `launch_finscan.bat` file in the application folder
+
+### Other Operating Systems
 
 ```bash
-python finscan_app.py
+# Set required environment variables
+export QTWEBENGINE_DISABLE_SANDBOX=1
+export QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu"
+export PYTHONIOENCODING="utf-8"
+
+# Run the application
+python finscan.py
 ```
 
 ## Using the Application
 
-1. **Input a Stock Symbol**
-   - Type a stock symbol in the text box (e.g., "AAPL")
-   - Or click one of the example buttons
+1. **Analyze a Stock**
+   - Enter a stock symbol in the search box (e.g., "AAPL")
+   - Click "Search" or press Enter to generate data
+   - Watch the progress in the console output area
 
-2. **Generate Data**
-   - Click the "Generate Data" button
-   - Watch the console output for progress
-   - Wait for the process to complete (typically 10-15 seconds)
+2. **View Analysis Results**
+   - Collected data will be displayed in the main view with collapsible sections
+   - TradingView chart will automatically load for visual analysis
+   - Insider trading data is displayed in a dedicated section
 
-3. **View the Results**
-   - When processing is complete, you'll be prompted to open the report
-   - You can also double-click any report in the "Generated Files" list
-   - Reports open in your default web browser
+3. **File Management**
+   - All generated reports appear in the file list on the left
+   - Select any file to view its contents
+   - Use the View, Save, and Delete buttons to manage your files
 
-4. **Manage Generated Files**
-   - All generated reports appear in the "Generated Files" list
-   - Click "Refresh" to update the list
-   - Double-click any file to open it
+4. **Advanced Features**
+   - Use the tabs to switch between different views
+   - External websites can be opened in dedicated tabs
+   - Customize the display using the various view options
+
+## Updating FinScan
+
+To update FinScan to the latest version:
+
+1. **Get the Latest Code**
+   - Pull the latest code from the repository or download the newest release
+   - Replace the existing application files with the new ones
+
+2. **Update Dependencies**
+   - Run the following command to update required packages:
+   ```bash
+   pip install -r requirements.txt --upgrade
+   ```
+
+3. **Verify Installation**
+   - Run `launch_finscan.bat` to ensure everything works correctly
+   - The application will automatically use the updated files
 
 ## Troubleshooting
 
-**Error generating data**: Make sure you have internet access and the stock symbol exists
+**Application won't start**: 
+- Verify that Python is installed and in your PATH
+- Check that all required packages are installed using `pip install -r requirements.txt`
+- Make sure the Qt WebEngine cache is cleared (the launcher does this automatically)
 
-**No console output**: The scraper may have encountered an error - check the console for details
+**Error loading stock data**: 
+- Ensure you have an active internet connection
+- Verify the stock symbol exists and is correctly entered
+- Some websites may temporarily block requests; wait a few minutes and try again
 
-**Files not appearing in list**: Click the "Refresh" button to update the file list
+**UI display issues**: 
+- Try clearing the Qt WebEngine cache manually by deleting the folder at `%LOCALAPPDATA%\python3\QtWebEngine`
+- Restart the application using the launcher
 
-## Advanced
+## Advanced Usage
 
-The application runs the same Python script as the command-line version. You can still use the command line for advanced or batch operations:
+For power users, FinScan can be used directly from the command line:
 
 ```bash
-python stock_data_scraper.py SYMBOL --html --output FILENAME.html
+# Generate data for a specific symbol
+python stock_data_scraper.py AAPL --html
+
+# Customize output location
+python stock_data_scraper.py TSLA --html --output custom_report.html
+
+# Generate JSON data instead of HTML
+python stock_data_scraper.py MSFT --json
 ```
+
+## Project Structure
+
+The repository contains the following key files:
+
+| File | Description |
+|------|-------------|
+| **launch_finscan.bat** | Primary launcher for Windows users - runs the application with proper environment settings |
+| **install_finscan.bat** | Installation script that sets up shortcuts and icons |
+| **update_finscan.bat** | Helper script for updating dependencies and clearing caches |
+| **uninstall_finscan.bat** | Removes shortcuts created during installation |
+| **finscan.py** | Main application code with the Qt interface |
+| **stock_data_scraper.py** | Core data collection module |
+| **openinsider_parser.py** | Module for parsing insider trading data |
+| **finscan.ico** | Application icon |
+| **requirements.txt** | List of Python package dependencies |
+
+## Folder Structure
+
+| Folder | Description |
+|--------|-------------|
+| **saved_data/** | Permanent storage location for saved reports |
+| **temp_data/** | Temporary storage for generated reports |
+| **__pycache__/** | Python bytecode cache (automatically generated) |
+
+## Distributing FinScan
+
+If you want to share FinScan with others who don't have the code:
+
+1. **Create a distribution package:**
+   - Include all Python files (*.py)
+   - Include all batch files (*.bat)  
+   - Include the icon file (finscan.ico)
+   - Include requirements.txt
+   - Include the LICENSE file
+
+2. **Instructions for recipients:**
+   - Install Python 3.8 or higher if they don't have it
+   - Extract all files to a folder
+   - Run `install_finscan.bat` to set up the application
+   
+The installer will handle the rest, creating shortcuts and installing dependencies.
+
+## License
+
+FinScan is licensed under the MIT License.
+
+Copyright (c) 2025 Cyril Lutziger
+
+See the [LICENSE](LICENSE) file for full details.

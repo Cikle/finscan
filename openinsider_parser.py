@@ -1,3 +1,9 @@
+"""
+OpenInsider Parser - Module for parsing insider trading data for FinScan Qt
+
+Copyright (c) 2025 Cyril Lutziger
+License: MIT (see LICENSE file for details)
+"""
 import requests
 from bs4 import BeautifulSoup
 import json

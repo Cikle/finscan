@@ -1,3 +1,9 @@
+"""
+FinScan Stock Data Scraper - Core data collection module for FinScan Qt
+
+Copyright (c) 2025 Cyril Lutziger
+License: MIT (see LICENSE file for details)
+"""
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
