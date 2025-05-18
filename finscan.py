@@ -20,8 +20,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QProgressBar, QTextEdit, QMessageBox, QHeaderView, 
                             QComboBox, QFileDialog, QFrame, QGridLayout, QGroupBox)
 from PyQt5.QtCore import QSettings
-from PyQt5.QtCore import Qt, QUrl, pyqtSlot, QSize, QThread, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, QUrl, pyqtSlot, QSize, QThread, pyqtSignal, QTimer, QObject
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebChannel import QWebChannel
 from PyQt5.QtGui import QIcon, QFont, QColor, QPalette
 
 # Import stock_data_scraper directly - we'll handle Unicode safety within this app
@@ -154,6 +155,37 @@ class ConsoleThread(QThread):
             self.command_finished.emit(False, str(e))
 
 
+class WebBridge(QObject):
+    """Bridge for JavaScript to Python communication"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.main_window = None
+    
+    @pyqtSlot(str)
+    def openExternal(self, url):
+        """Opens an external URL in the default browser"""
+        webbrowser.open(url)
+        
+    @pyqtSlot(str, str)
+    def openInTab(self, url, title="External Page"):
+        """Opens an external URL in the appropriate tab based on the domain"""
+        if self.main_window:
+            # Check if URL is from one of our supported sites
+            if "finviz.com" in url:
+                self.main_window.finviz_view.load(QUrl(url))
+                self.main_window.tab_widget.setCurrentWidget(self.main_window.finviz_tab)
+            elif "openinsider.com" in url:
+                self.main_window.openinsider_view.load(QUrl(url))
+                self.main_window.tab_widget.setCurrentWidget(self.main_window.openinsider_tab)
+            elif "finance.yahoo.com" in url:
+                self.main_window.yahoo_view.load(QUrl(url))
+                self.main_window.tab_widget.setCurrentWidget(self.main_window.yahoo_tab)
+            else:
+                # For other URLs, open in a new tab
+                self.main_window.open_url_in_tab(url, title)
+
+
 class TradingViewWidget(QWebEngineView):
     """Widget for displaying TradingView charts"""
     def __init__(self, parent=None):
@@ -167,7 +199,20 @@ class TradingViewWidget(QWebEngineView):
             os.makedirs(cache_dir, exist_ok=True)
         profile.setCachePath(cache_dir)
         profile.setPersistentStoragePath(cache_dir)
+          # Add bridge to open external URLs
+        self.page().profile().downloadRequested.connect(self.on_download_requested)
+        
+        # Set up channel for JavaScript to communicate with Python
+        self.page().setWebChannel(QWebChannel(self.page()))
+        self.bridge = WebBridge()
+        self.page().webChannel().registerObject('qt', self.bridge)
           
+    def on_download_requested(self, download):
+        """Handle download requests by opening in external browser"""
+        url = download.url().toString()
+        webbrowser.open(url)
+        download.cancel()  # Cancel the download in the WebEngine
+        
     def load_chart(self, symbol, company_name=""):
         """Load TradingView chart for the given symbol"""
         # Extract just the symbol part without exchange
@@ -189,8 +234,7 @@ class TradingViewWidget(QWebEngineView):
                     --button-hover-bg: #1E52E0;
                     --shadow-color: rgba(0,0,0,0.2);
                 }
-                
-                body, html { 
+                  body, html { 
                     margin: 0; 
                     padding: 0; 
                     height: 100%; 
@@ -198,19 +242,18 @@ class TradingViewWidget(QWebEngineView):
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    justify-content: center;
                     background-color: var(--bg-color);
                     color: var(--text-color);
                     font-family: Arial, sans-serif;
-                }
-                .chart-container {
+                    overflow-y: auto;
+                }                .chart-container {
                     width: 100%;
-                    height: 100%;
+                    padding-top: 20px;
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    justify-content: center;
                     text-align: center;
+                    margin-top: 20px;
                 }
                 .symbol {
                     font-size: 24px;
@@ -227,8 +270,7 @@ class TradingViewWidget(QWebEngineView):
                     max-width: 1200px;
                     border-radius: 8px;
                     box-shadow: 0 4px 8px var(--shadow-color);
-                }
-                .note {
+                }                .note {
                     margin-top: 10px;
                     color: var(--note-color);
                     font-size: 12px;
@@ -250,6 +292,27 @@ class TradingViewWidget(QWebEngineView):
                 }
                 .button:hover {
                     background-color: var(--button-hover-bg);
+                }                .chart-options {
+                    margin-bottom: 10px;
+                    display: flex;
+                    justify-content: center;
+                }
+                .chart-btn {
+                    margin: 0 5px;
+                    padding: 5px 15px;
+                    background-color: #eee;
+                    border: 1px solid #ddd;
+                    border-radius: 3px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .chart-btn.active {
+                    background-color: var(--button-bg);
+                    color: white;
+                    border-color: var(--button-bg);
+                }
+                .chart-btn:hover:not(.active) {
+                    background-color: #ddd;
                 }
                 .buttons-container {
                     margin-top: 20px;
@@ -280,16 +343,15 @@ class TradingViewWidget(QWebEngineView):
         <body>
             <div class="chart-container">
                 <div class="symbol">REPLACE_SYMBOL</div>
-                <div class="company-name">COMPANY_NAME</div>
+                <div class="company-name">COMPANY_NAME</div>                <!-- Chart timeframe options -->                <div class="chart-options">
+                    <button class="chart-btn active" data-timeframe="d">Daily</button>
+                    <button class="chart-btn" data-timeframe="w">Weekly</button>
+                    <button class="chart-btn" data-timeframe="y">Monthly</button>
+                    <button class="chart-btn" data-timeframe="m">Yearly</button>
+                </div>
                 <!-- Use direct img tag instead of background-image for better reliability -->
                 <img class="chart-image" src="https://charts2.finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l" alt="SYMBOL_ONLY Chart" onerror="this.onerror=null; this.src='https://finviz.com/chart.ashx?t=SYMBOL_ONLY&ty=c&ta=1&p=d&s=l';">
-                <div class="note">Chart data from Finviz</div>                <div class="buttons-container">
-                    <a class="button" href="javascript:void(0);" onclick="window.open('https://finviz.com/quote.ashx?t=SYMBOL_ONLY', '_blank')">View on Finviz</a>
-                    <a class="button" href="javascript:void(0);" onclick="window.open('http://openinsider.com/screener?s=SYMBOL_ONLY', '_blank')">View on OpenInsider</a>
-                    <a class="button" href="javascript:void(0);" onclick="window.open('https://finance.yahoo.com/quote/SYMBOL_ONLY', '_blank')">View on Yahoo Finance</a>
-                </div>
-            </div>
-              <!-- Script to handle image loading errors -->            <script>
+            </div>              <!-- Script to handle image loading errors and chart timeframe -->            <script>
                 document.addEventListener('DOMContentLoaded', function() {
                     // Handle image loading errors
                     const img = document.querySelector('.chart-image');
@@ -306,6 +368,54 @@ class TradingViewWidget(QWebEngineView):
                             container.insertBefore(errorMsg, document.querySelector('.note'));
                         };
                     };
+                    
+                    // Handle chart timeframe buttons
+                    const timeframeButtons = document.querySelectorAll('.chart-btn');
+                    timeframeButtons.forEach(button => {
+                        button.addEventListener('click', function() {
+                            // Remove active class from all buttons
+                            timeframeButtons.forEach(btn => btn.classList.remove('active'));
+                            
+                            // Add active class to clicked button
+                            this.classList.add('active');
+                            
+                            // Update chart timeframe
+                            const timeframe = this.getAttribute('data-timeframe');
+                            const img = document.querySelector('.chart-image');
+                            const currentSrc = img.src;                            // Update timeframe parameter
+                            console.log(`Changing chart to timeframe: ${timeframe}`);
+                            
+                            // Create a completely new URL with the selected timeframe
+                            const baseUrl = currentSrc.split('&p=')[0];
+                            const newSrc = `${baseUrl}&p=${timeframe}${currentSrc.includes('&s=') ? '&s=l' : ''}`;
+                            
+                            console.log(`New URL: ${newSrc}`);
+                            img.src = newSrc;
+                        });
+                    });                    // Handle external links to open in browser
+                    const externalLinks = document.querySelectorAll('.button');
+                    externalLinks.forEach(link => {
+                        link.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            try {
+                                const urlStr = this.href;
+                                if (urlStr) {
+                                    console.log("Opening URL: " + urlStr);
+                                    
+                                    // Use Qt bridge to open links in tabs
+                                    if (window.qt && typeof window.qt.openInTab === 'function') {
+                                        console.log("Using Qt bridge");
+                                        window.qt.openInTab(urlStr, this.textContent.trim());
+                                    } else {
+                                        console.log("Fallback to window.open");
+                                        window.open(urlStr, '_blank');
+                                    }
+                                }
+                            } catch (error) {
+                                console.error("Error handling link click: ", error);
+                            }
+                        });
+                    });
                 });
             </script>
         </body>
@@ -568,7 +678,6 @@ class StockDataProcessor:
 
 class FinScanQt(QMainWindow):
     """Main application window"""
-    
     def __init__(self):
         super().__init__()
         self.file_manager = FileManager()
@@ -582,32 +691,33 @@ class FinScanQt(QMainWindow):
         
         # Show default chart
         self.tradingview_widget.load_chart("NASDAQ:NVDA")
-    
-    def closeEvent(self, event):
-        """Handle application close event - clean up temp files"""
-        try:
-            self.cleanup_temp_files()
-        except Exception as e:
-            print(f"Error cleaning up temp files: {e}")
-        event.accept()
-    
-    def cleanup_temp_files(self):
-        """Clean up temporary files when the application closes"""
-        if hasattr(self, 'file_manager') and self.file_manager:
-            # Get all temporary files
-            temp_dir = self.file_manager.temp_dir
-            if os.path.exists(temp_dir):
-                print(f"Cleaning up temporary files in {temp_dir}")
-                try:
-                    # Delete all files in temp directory
-                    for filename in os.listdir(temp_dir):
-                        file_path = os.path.join(temp_dir, filename)
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                            print(f"Deleted temporary file: {filename}")
-                except Exception as e:
-                    print(f"Error deleting temp files: {e}")
         
+        # Set the main window reference in WebBridge objects
+        self.tradingview_widget.bridge.main_window = self
+    
+    def open_url_in_tab(self, url, title):
+        """Opens a URL in a new tab"""
+        # Create a new web view for the tab
+        web_view = QWebEngineView()
+        web_view.load(QUrl(url))
+        
+        # Add to tab widget
+        tab_index = self.tab_widget.addTab(web_view, title)
+        self.tab_widget.setCurrentIndex(tab_index)
+        
+        # Add a close button to the tab
+        close_button = QPushButton("×")
+        close_button.setFixedSize(20, 20)
+        close_button.setStyleSheet("QPushButton { border: none; color: #777; } QPushButton:hover { color: #f00; }")
+        close_button.clicked.connect(lambda: self.close_tab(tab_index))
+        self.tab_widget.tabBar().setTabButton(tab_index, self.tab_widget.tabBar().RightSide, close_button)
+        
+    def close_tab(self, index):
+        """Close a tab by index"""
+        # Don't close the first five tabs (Chart & Metrics, Full Report, Finviz, OpenInsider, Yahoo Finance)
+        if index > 4:
+            self.tab_widget.removeTab(index)
+    
     def init_ui(self):
         """Set up the user interface"""
         self.setWindowTitle("FinScan Qt - Stock Data Analyzer")
@@ -768,8 +878,7 @@ class FinScanQt(QMainWindow):
         combined_tab.setLayout(combined_layout)
         
         self.tab_widget.addTab(combined_tab, "Chart & Metrics")
-        
-        # HTML Report tab (will be populated when a report is selected)
+          # HTML Report tab (will be populated when a report is selected)
         self.report_tab = QWidget()
         report_layout = QVBoxLayout(self.report_tab)
         
@@ -777,6 +886,25 @@ class FinScanQt(QMainWindow):
         report_layout.addWidget(self.report_view)
         
         self.tab_widget.addTab(self.report_tab, "Full Report")
+        
+        # Create dedicated tabs for external services
+        self.finviz_tab = QWidget()
+        finviz_layout = QVBoxLayout(self.finviz_tab)
+        self.finviz_view = QWebEngineView()
+        finviz_layout.addWidget(self.finviz_view)
+        self.tab_widget.addTab(self.finviz_tab, "Finviz")
+        
+        self.openinsider_tab = QWidget()
+        openinsider_layout = QVBoxLayout(self.openinsider_tab)
+        self.openinsider_view = QWebEngineView()
+        openinsider_layout.addWidget(self.openinsider_view)
+        self.tab_widget.addTab(self.openinsider_tab, "OpenInsider")
+        
+        self.yahoo_tab = QWidget()
+        yahoo_layout = QVBoxLayout(self.yahoo_tab)
+        self.yahoo_view = QWebEngineView()
+        yahoo_layout.addWidget(self.yahoo_view)
+        self.tab_widget.addTab(self.yahoo_tab, "Yahoo Finance")
         
         right_layout.addWidget(self.tab_widget)
         
@@ -1138,9 +1266,7 @@ class FinScanQt(QMainWindow):
                             formatted_metrics += "</tr>"
                             
                         formatted_metrics += "</table>"
-                        formatted_metrics += "</div>"
-                    
-                    # Growth metrics section
+                        formatted_metrics += "</div>"                    # Growth metrics section
                     if metrics.get('growth_metrics') and len(metrics['growth_metrics']) > 0:
                         formatted_metrics += "<button class='collapsible' data-target='growth-metrics' onclick='toggleCollapsible(\"growth-metrics\")'>Growth Metrics ▼</button>"
                         formatted_metrics += "<div id='growth-metrics' class='content'>"
@@ -1187,25 +1313,47 @@ class FinScanQt(QMainWindow):
                     if company_name:
                         report_tab_title = f"Full Report - {file_info['symbol']} ({company_name})"
                     self.tab_widget.setTabText(1, report_tab_title)
-                    
-                    # Switch to the combined tab
+                      # Switch to the combined tab
                     self.tab_widget.setCurrentIndex(0)
-        else:
-            self.view_btn.setEnabled(False)
-            self.save_btn.setEnabled(False)
-            self.delete_btn.setEnabled(False)
-            self.current_file = None
-            self.symbol_header.setText("")
-            # Reset tab title
-            self.tab_widget.setTabText(1, "Full Report")
+          # Update external service tabs
+        if self.current_file:
+            self.update_external_tabs(symbol=self.current_file['symbol'])
+    def update_external_tabs(self, symbol):
+        """Update the external service tabs with the current symbol"""
+        if symbol:
+            # Load Finviz tab
+            finviz_url = f"https://finviz.com/quote.ashx?t={symbol}"
+            self.finviz_view.load(QUrl(finviz_url))
+            
+            # Load OpenInsider tab
+            openinsider_url = f"http://openinsider.com/screener?s={symbol}"
+            self.openinsider_view.load(QUrl(openinsider_url))
+            
+            # Load Yahoo Finance tab
+            yahoo_url = f"https://finance.yahoo.com/quote/{symbol}"
+            self.yahoo_view.load(QUrl(yahoo_url))
     
     def on_file_double_clicked(self, row, column):
         """Handle double-click on file in the list"""
         self.on_view_clicked()
+        
     def on_view_clicked(self):
-        """View selected report in browser"""
+        """View selected report in a new tab"""
         if self.current_file and os.path.exists(self.current_file['path']):
-            webbrowser.open(f"file://{self.current_file['path']}")
+            # Create a new web view for the tab
+            web_view = QWebEngineView()
+            web_view.load(QUrl.fromLocalFile(self.current_file['path']))
+            
+            # Add to tab widget
+            tab_index = self.tab_widget.addTab(web_view, f"External View - {self.current_file['symbol']}")
+            self.tab_widget.setCurrentIndex(tab_index)
+            
+            # Add a close button to the tab
+            close_button = QPushButton("×")
+            close_button.setFixedSize(20, 20)
+            close_button.setStyleSheet("QPushButton { border: none; color: #777; } QPushButton:hover { color: #f00; }")
+            close_button.clicked.connect(lambda: self.close_tab(tab_index))
+            self.tab_widget.tabBar().setTabButton(tab_index, self.tab_widget.tabBar().RightSide, close_button)
     
     def on_save_clicked(self):
         """Save temporary file to permanent storage"""
