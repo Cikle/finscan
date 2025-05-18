@@ -31,6 +31,15 @@ from PyQt5.QtGui import QIcon, QFont, QColor, QPalette
 # Import stock_data_scraper directly - we'll handle Unicode safety within this app
 try:
     import stock_data_scraper
+    
+    # Import update checker if available
+    try:
+        from check_updates import UpdateChecker
+        HAS_UPDATE_CHECKER = True
+    except ImportError:
+        HAS_UPDATE_CHECKER = False
+        print("Update checker not available - updates will be manual only")
+        
 except ImportError:
     print("Error: stock_data_scraper.py not found in the current directory.")
     sys.exit(1)
@@ -156,6 +165,40 @@ class ConsoleThread(QThread):
         except Exception as e:
             self.output_received.emit(f"Exception: {str(e)}")
             self.command_finished.emit(False, str(e))
+
+
+class UpdateCheckerThread(QThread):
+    """Thread for checking for updates"""
+    update_available = pyqtSignal(str, str)  # version, release_notes
+    no_update = pyqtSignal()
+    error = pyqtSignal(str)
+    
+    def __init__(self):
+        super().__init__()
+        
+    def run(self):
+        try:
+            # Create an update checker
+            checker = UpdateChecker(auto_check=True)
+            
+            if checker.update_available:
+                # Get the information about the update
+                version = checker.latest_version
+                release_notes = ""
+                
+                if 'release_notes' in checker.update_info:
+                    release_notes = checker.update_info['release_notes']
+                elif 'message' in checker.update_info:
+                    release_notes = checker.update_info['message']
+                else:
+                    release_notes = f"New version {version} is available."
+                    
+                self.update_available.emit(version, release_notes)
+            else:
+                self.no_update.emit()
+                
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class WebBridge(QObject):
@@ -727,6 +770,32 @@ class FinScanQt(QMainWindow):
         self.setGeometry(100, 100, 1280, 800)
         self.setMinimumSize(900, 600)
         
+        # Set window icon if available
+        if os.path.exists("finscan.ico"):
+            self.setWindowIcon(QIcon("finscan.ico"))
+        
+        # Create menu bar
+        menubar = self.menuBar()
+        
+        # File menu
+        file_menu = menubar.addMenu("File")
+        
+        # Exit action
+        exit_action = file_menu.addAction("Exit")
+        exit_action.triggered.connect(self.close)
+        
+        # Help menu
+        help_menu = menubar.addMenu("Help")
+        
+        # Check for updates action
+        if HAS_UPDATE_CHECKER:
+            update_action = help_menu.addAction("Check for Updates")
+            update_action.triggered.connect(self.check_for_updates)
+        
+        # About action
+        about_action = help_menu.addAction("About FinScan")
+        about_action.triggered.connect(self.show_about)
+        
         # Main layout
         main_widget = QWidget()
         main_layout = QHBoxLayout(main_widget)
@@ -1269,8 +1338,7 @@ class FinScanQt(QMainWindow):
                             formatted_metrics += "</tr>"
                             
                         formatted_metrics += "</table>"
-                        formatted_metrics += "</div>"                    # Growth metrics section
-                    if metrics.get('growth_metrics') and len(metrics['growth_metrics']) > 0:
+                        formatted_metrics += "</div>"                    # Growth metrics section                    if metrics.get('growth_metrics') and len(metrics['growth_metrics']) > 0:
                         formatted_metrics += "<button class='collapsible' data-target='growth-metrics' onclick='toggleCollapsible(\"growth-metrics\")'>Growth Metrics ▼</button>"
                         formatted_metrics += "<div id='growth-metrics' class='content'>"
                         formatted_metrics += "<table border='0' style='width:100%'>"
@@ -1444,6 +1512,57 @@ class FinScanQt(QMainWindow):
                 self.status_label.setText(f"Error collecting data for {symbol}!")
                 QMessageBox.critical(self, "Error", f"Failed to generate data: {error}")    # Toggle theme method removed - always using light mode
 
+    def check_for_updates(self):
+        """Check for updates using the UpdateChecker"""
+        if HAS_UPDATE_CHECKER:
+            self.status_label.setText("Checking for updates...")
+            
+            # Create and start the update checker thread
+            self.update_thread = UpdateCheckerThread()
+            self.update_thread.update_available.connect(self.on_update_available)
+            self.update_thread.no_update.connect(self.on_no_update)
+            self.update_thread.error.connect(self.on_update_error)
+            self.update_thread.start()
+        else:
+            QMessageBox.warning(self, "Update Checker Not Available", "The update checker is not available in this version.")
+    
+    def on_update_available(self, version, release_notes):
+        """Handle update availability"""
+        self.status_label.setText(f"Update available: {version}")
+        
+        # Show update dialog with release notes
+        update_dialog = QMessageBox(self)
+        update_dialog.setWindowTitle("Update Available")
+        update_dialog.setText(f"An update to version {version} is available!")
+        update_dialog.setInformativeText(release_notes)
+        update_dialog.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        update_dialog.setDefaultButton(QMessageBox.Yes)
+        
+        if update_dialog.exec_() == QMessageBox.Yes:
+            # User accepted the update - open the update URL
+            webbrowser.open("https://github.com/cyrluz/FinScanQt/releases")
+        
+        self.status_label.setText("Ready to collect stock data...")
+    
+    def on_no_update(self):
+        """Handle no update available"""
+        self.status_label.setText("No updates available.")
+        QMessageBox.information(self, "No Update", "You are using the latest version.")
+    
+    def on_update_error(self, error):
+        """Handle update check error"""
+        self.status_label.setText("Error checking for updates.")
+        QMessageBox.critical(self, "Update Error", f"Failed to check for updates: {error}")
+    
+    def show_about(self):
+        """Show about dialog"""
+        about_dialog = QMessageBox(self)
+        about_dialog.setWindowTitle("About FinScan Qt")
+        about_dialog.setText("FinScan Qt - Stock Data Analyzer")
+        about_dialog.setInformativeText("A modern Qt-based interface for stock data analysis.\n\nCopyright (c) 2025 Cyril Lutziger\nLicense: MIT (see LICENSE file for details)")
+        about_dialog.setStandardButtons(QMessageBox.Ok)
+        about_dialog.exec_()
+        
 
 def main():
     # Set environment variable for encoding

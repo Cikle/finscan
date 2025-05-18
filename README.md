@@ -89,7 +89,25 @@ python finscan.py
 
 ## Updating FinScan
 
-To update FinScan to the latest version:
+### Automatic Updates
+
+FinScan includes an integrated update system that allows users to easily check for and apply updates:
+
+1. **Check for Updates in the Application**
+   - From the FinScan Qt interface, click on "Help" in the menu bar
+   - Select "Check for Updates"
+   - If an update is available, follow the prompts to download and install
+
+2. **Using the Update Script**
+   - Run `update_finscan.bat` from the application folder
+   - The script will:
+     - Check for new versions of Python dependencies
+     - Clear cached data to prevent UI issues
+     - Offer to restart the application with the updates applied
+
+### Manual Updates
+
+To manually update FinScan to the latest version:
 
 1. **Get the Latest Code**
    - Pull the latest code from the repository or download the newest release
