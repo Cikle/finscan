@@ -94,7 +94,7 @@ python finscan.py
 
 ### Automatic Updates
 
-FinScan includes an integrated update system that allows users to easily check for and apply updates:
+FinScan includes an integrated update system that allows users to easily check for and apply updates (I don't think it works):
 
 1. **Check for Updates in the Application**
    - From the FinScan Qt interface, click on "Help" in the menu bar
@@ -110,7 +110,7 @@ FinScan includes an integrated update system that allows users to easily check f
 
 ### Manual Updates
 
-To manually update FinScan to the latest version:
+To manually update FinScan to the latest version (use this):
 
 1. **Get the Latest Code**
    - Pull the latest code from the repository or download the newest release
@@ -165,7 +165,7 @@ The repository contains the following key files:
 |------|-------------|
 | **launch_finscan.bat** | Primary launcher for Windows users - runs the application with proper environment settings |
 | **install_finscan.bat** | Installation script that sets up shortcuts and icons |
-| **update_finscan.bat** | Helper script for updating dependencies and clearing caches |
+| **update_finscan.bat** | Helper script for updating dependencies and clearing caches | I don't think it works|
 | **uninstall_finscan.bat** | Removes shortcuts created during installation |
 | **finscan.py** | Main application code with the Qt interface |
 | **stock_data_scraper.py** | Core data collection module |
