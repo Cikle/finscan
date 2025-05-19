@@ -1,6 +1,7 @@
 # FinScan Qt - Stock Market Data Analysis Tool
 
 [![Download Latest Release](https://img.shields.io/github/v/release/cikle/finscan?label=Download&style=for-the-badge)](https://github.com/cikle/finscan/releases/latest)
+(no idea why this button doesn't change)
 
 FinScan Qt is a modern, feature-rich desktop application for analyzing stock market data with a user-friendly interface.
 
