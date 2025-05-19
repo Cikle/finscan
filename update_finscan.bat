@@ -46,3 +46,13 @@ if %ERRORLEVEL% equ 1 (
 )
 echo.
 pause
+echo. 
+echo Update completed! 
+echo. 
+echo Would you like to run FinScan Qt now? (Y/N) 
+choice /c YN /n 
+if %ERRORLEVEL% equ 1 ( 
+    start "" "%~dp0launch_finscan.bat" 
+) 
+echo. 
+pause 
