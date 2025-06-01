@@ -1,5 +1,7 @@
 # FinScan Qt - Stock Market Data Analysis Tool
 
+It may or may not  work, I have no idea why but yeah :3
+
 [![Download Latest Release](https://img.shields.io/github/v/release/cikle/finscan?label=Download&style=for-the-badge)](https://github.com/cikle/finscan/releases/latest)
 (no idea why this button doesn't change)
 
